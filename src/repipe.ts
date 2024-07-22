@@ -1,8 +1,10 @@
 // Bring back Readable/WritableStream and re-pipe each other, when they are broken or other event emitted
 
+import { EventTarget2 } from "@freezm-ltd/event-target-2"
+
 export type StreamGenerator<T = ReadableStream | WritableStream> = () => T | PromiseLike<T>
 
-export class SwitchableStream {
+export class SwitchableStream extends EventTarget2 {
     protected readonly readable: ReadableStream
     protected readableAbortContorller = new AbortController()
     protected readonly writable: WritableStream
@@ -15,6 +17,7 @@ export class SwitchableStream {
         readableStrategy?: QueuingStrategy,
         writableStrategy?: QueuingStrategy,
     ) {
+        super()
         const { readable, writable } = new TransformStream(undefined, writableStrategy, readableStrategy)
         this.readable = readable
         this.writable = writable
@@ -24,41 +27,53 @@ export class SwitchableStream {
     // switch repipe
     //    |    |
     // source -> this.writable -> this.readable -> sink
+    protected readableSwitching = false
     async switchReadable(to?: ReadableStream) {
-        this.readableAbortContorller.abort(this.abortReason) // abort first
-        this.readableAbortContorller = new AbortController()
-        while (!to) {
-            try {
-                to = await this.readableGenerator(); // get source
-            } catch (e) {
-                // slient catch, restart
+        if (!to && this.readableSwitching) return; // ignore standard switching if switching is already in progress
+        return this.atomic("switch-readable", async () => { // wait for previous switching ends
+            this.readableSwitching = true
+            while (!to) {
+                try {
+                    to = await this.readableGenerator(); // get source
+                } catch (e) {
+                    // slient catch, restart
+                }
             }
-        }
-        to.pipeTo(this.writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.readableAbortContorller.signal })
-            .then(() => this.writable.close())
-            .catch(e => {
-                if (e !== this.abortReason) this.switchReadable() // automatic repipe except intended abort
-            })
+            this.readableAbortContorller.abort(this.abortReason) // abort previous piping
+            this.readableAbortContorller = new AbortController()
+            to.pipeTo(this.writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.readableAbortContorller.signal })
+                .then(() => this.writable.close())
+                .catch(e => {
+                    if (e !== this.abortReason) this.switchReadable() // automatic repipe except intended abort
+                })
+            this.readableSwitching = false
+        })
     }
 
     //                                      repipe switch
     //                                          |   |
     // source -> this.writable -> this.readable -> sink
+    protected writableSwitching = false
     async switchWritable(to?: WritableStream) {
-        this.writableAbortController.abort() // abort first
-        this.writableAbortController = new AbortController()
-        while (!to) {
-            try {
-                to = await this.writableGenerator(); // get sink
-            } catch (e) {
-                // slient catch, restart
+        if (!to && this.writableSwitching) return; // ignore standard switching if switching is already in progress
+        return this.atomic("switch-writable", async () => { // wait for previous switching ends
+            this.writableSwitching = true
+            while (!to) {
+                try {
+                    to = await this.writableGenerator(); // get sink
+                } catch (e) {
+                    // slient catch, restart
+                }
             }
-        }
-        this.readable.pipeTo(to, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.writableAbortController.signal })
-            .then(() => to.close())
-            .catch(e => {
-                if (e !== this.abortReason) this.switchWritable() // automatic repipe except intended abort
-            })
+            this.writableAbortController.abort(this.abortReason) // abort previous piping
+            this.writableAbortController = new AbortController()
+            this.readable.pipeTo(to, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.writableAbortController.signal })
+                .then(() => to!.close())
+                .catch(e => {
+                    if (e !== this.abortReason) this.switchWritable() // automatic repipe except intended abort
+                })
+            this.writableSwitching = false
+        })
     }
 
     abort() { // just abort and do not repipe

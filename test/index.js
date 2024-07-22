@@ -1,9 +1,10 @@
-// node_modules/.pnpm/@freezm-ltd+event-target-2@https+++codeload.github.com+freezm-ltd+EventTarget2+tar.gz+36ba089_bolpylkksoeea65grmz4vnz36u/node_modules/@freezm-ltd/event-target-2/dist/index.js
+// node_modules/.pnpm/@freezm-ltd+event-target-2@https+++codeload.github.com+freezm-ltd+EventTarget2+tar.gz+799deba_oblkccuzqonyswgluuenu6fpzq/node_modules/@freezm-ltd/event-target-2/dist/index.js
 var EventTarget2 = class extends EventTarget {
   constructor() {
     super(...arguments);
     this.listeners = /* @__PURE__ */ new Map();
     this._bubbleMap = /* @__PURE__ */ new Map();
+    this.atomicQueue = /* @__PURE__ */ new Map();
   }
   async waitFor(type, compareValue) {
     return new Promise((resolve) => {
@@ -96,6 +97,29 @@ var EventTarget2 = class extends EventTarget {
     this.remove(type, dispatcher);
     this._bubbleMap.delete(type);
   }
+  _atomicInit(type) {
+    this.atomicQueue.set(type, []);
+    const atomicLoop = async () => {
+      const queue = this.atomicQueue.get(type);
+      while (true) {
+        const task = queue.shift();
+        if (task) {
+          await task();
+        } else {
+          await this.waitFor("__atomic-add", type);
+        }
+      }
+    };
+    atomicLoop();
+  }
+  atomic(type, func) {
+    return new Promise((resolve) => {
+      const wrap = async () => resolve(await func());
+      if (!this.atomicQueue.has(type)) this._atomicInit(type);
+      this.atomicQueue.get(type).push(wrap);
+      this.dispatch("__atomic-add", type);
+    });
+  }
 };
 
 // src/flow.ts
@@ -167,49 +191,62 @@ var Flowmeter = class extends EventTarget2 {
 };
 
 // src/repipe.ts
-var SwitchableStream = class {
+var SwitchableStream = class extends EventTarget2 {
   // for identify abort
   constructor(readableGenerator, writableGenerator, readableStrategy, writableStrategy) {
+    super();
     this.readableGenerator = readableGenerator;
     this.writableGenerator = writableGenerator;
     this.readableAbortContorller = new AbortController();
     this.writableAbortController = new AbortController();
     this.abortReason = crypto.randomUUID();
+    // switch repipe
+    //    |    |
+    // source -> this.writable -> this.readable -> sink
+    this.readableSwitching = false;
+    //                                      repipe switch
+    //                                          |   |
+    // source -> this.writable -> this.readable -> sink
+    this.writableSwitching = false;
     const { readable, writable } = new TransformStream(void 0, writableStrategy, readableStrategy);
     this.readable = readable;
     this.writable = writable;
     this.switchWritable().then(() => this.switchReadable());
   }
-  // switch repipe
-  //    |    |
-  // source -> this.writable -> this.readable -> sink
   async switchReadable(to) {
-    this.readableAbortContorller.abort(this.abortReason);
-    this.readableAbortContorller = new AbortController();
-    while (!to) {
-      try {
-        to = await this.readableGenerator();
-      } catch (e) {
+    if (!to && this.readableSwitching) return;
+    return this.atomic("switch-readable", async () => {
+      this.readableSwitching = true;
+      while (!to) {
+        try {
+          to = await this.readableGenerator();
+        } catch (e) {
+        }
       }
-    }
-    to.pipeTo(this.writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.readableAbortContorller.signal }).then(() => this.writable.close()).catch((e) => {
-      if (e !== this.abortReason) this.switchReadable();
+      this.readableAbortContorller.abort(this.abortReason);
+      this.readableAbortContorller = new AbortController();
+      to.pipeTo(this.writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.readableAbortContorller.signal }).then(() => this.writable.close()).catch((e) => {
+        if (e !== this.abortReason) this.switchReadable();
+      });
+      this.readableSwitching = false;
     });
   }
-  //                                      repipe switch
-  //                                          |   |
-  // source -> this.writable -> this.readable -> sink
   async switchWritable(to) {
-    this.writableAbortController.abort();
-    this.writableAbortController = new AbortController();
-    while (!to) {
-      try {
-        to = await this.writableGenerator();
-      } catch (e) {
+    if (!to && this.writableSwitching) return;
+    return this.atomic("switch-writable", async () => {
+      this.writableSwitching = true;
+      while (!to) {
+        try {
+          to = await this.writableGenerator();
+        } catch (e) {
+        }
       }
-    }
-    this.readable.pipeTo(to, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.writableAbortController.signal }).then(() => to.close()).catch((e) => {
-      if (e !== this.abortReason) this.switchWritable();
+      this.writableAbortController.abort(this.abortReason);
+      this.writableAbortController = new AbortController();
+      this.readable.pipeTo(to, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.writableAbortController.signal }).then(() => to.close()).catch((e) => {
+        if (e !== this.abortReason) this.switchWritable();
+      });
+      this.writableSwitching = false;
     });
   }
   abort() {
@@ -343,8 +380,8 @@ function streamRetry(readableGenerator, sensor, option) {
   return readable;
 }
 function fetchRetry(input, init, option = { slowDown: 5e3, minSpeed: 5120, minDuration: 1e4 }) {
-  let start = -1;
-  let end = -1;
+  let start = 0;
+  let end = 0;
   let first = true;
   if (init && init.headers) {
     const headers = init.headers;
@@ -366,8 +403,8 @@ function fetchRetry(input, init, option = { slowDown: 5e3, minSpeed: 5120, minDu
   const readableGenerator = async () => {
     if (!first) await sleep(option.slowDown);
     first = false;
-    if (start !== -1) {
-      const Range = `bytes=${start}-${end !== -1 ? end : ""}`;
+    if (start !== 0) {
+      const Range = `bytes=${start}-${end !== 0 ? end : ""}`;
       if (!init) init = {};
       if (!init.headers) init.headers = new Headers({ Range });
       else if (init.headers instanceof Headers) init.headers.set("Range", Range);
@@ -380,8 +417,8 @@ function fetchRetry(input, init, option = { slowDown: 5e3, minSpeed: 5120, minDu
     const response = await fetch(input, init);
     let stream = response.body;
     if (!stream) throw new Error("Error: Cannot find response body");
-    if (!response.headers.get("Content-Range") && start !== -1) {
-      stream = stream.pipeThrough(sliceByteStream(start, end !== -1 ? end : void 0));
+    if (!response.headers.get("Content-Range") && start !== 0) {
+      stream = stream.pipeThrough(sliceByteStream(start, end !== 0 ? end : void 0));
     }
     return stream;
   };
@@ -395,5 +432,7 @@ export {
   fitStream,
   getFitter,
   mergeStream,
+  sliceByteStream,
+  sliceStream,
   streamRetry
 };

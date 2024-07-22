@@ -2,7 +2,7 @@ import { Flowmeter } from "./flow"
 import { StreamGenerator, SwitchableStream } from "./repipe"
 import { fitStream, getFitter, byteFitter } from "./fit"
 import { sleep } from "./utils"
-import { sliceByteStream } from "./slice"
+import { sliceStream, sliceByteStream } from "./slice"
 import { mergeStream } from "./merge"
 
 export type RetryOption = {
@@ -28,8 +28,8 @@ export function streamRetry<T>(readableGenerator: StreamGenerator<ReadableStream
 }
 
 export function fetchRetry(input: RequestInfo | URL, init?: RequestInit, option: RetryOption & { slowDown: number } = { slowDown: 5000, minSpeed: 5120, minDuration: 10000 }) {
-    let start = -1
-    let end = -1
+    let start = 0
+    let end = 0
     let first = true
 
     if (init && init.headers) {
@@ -54,8 +54,8 @@ export function fetchRetry(input: RequestInfo | URL, init?: RequestInit, option:
 
     const readableGenerator = async () => {
         if (!first) await sleep(option.slowDown); first = false; // retry slowdown
-        if (start !== -1) { // retry with continuous range
-            const Range = `bytes=${start}-${end !== -1 ? end : ""}` // inject request.headers.Range
+        if (start !== 0) { // retry with continuous range
+            const Range = `bytes=${start}-${end !== 0 ? end : ""}` // inject request.headers.Range
             if (!init) init = {};
             if (!init.headers) init.headers = new Headers({ Range });
             else if (init.headers instanceof Headers) init.headers.set("Range", Range);
@@ -69,9 +69,9 @@ export function fetchRetry(input: RequestInfo | URL, init?: RequestInit, option:
         const response = await fetch(input, init)
         let stream = response.body
         if (!stream) throw new Error("Error: Cannot find response body")
-        if (!response.headers.get("Content-Range") && start !== -1) {
+        if (!response.headers.get("Content-Range") && start !== 0) {
             // slice stream
-            stream = stream.pipeThrough(sliceByteStream(start, end !== -1 ? end : undefined))
+            stream = stream.pipeThrough(sliceByteStream(start, end !== 0 ? end : undefined))
         }
         return stream
     }
@@ -83,5 +83,6 @@ export {
     Flowmeter,
     SwitchableStream,
     fitStream, getFitter, byteFitter,
+    sliceStream, sliceByteStream,
     mergeStream,
 }

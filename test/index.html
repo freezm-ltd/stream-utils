@@ -13,10 +13,12 @@
 
         window.test = {
             fetchRetry: (url) => {
+                let reiceive = 0
                 const blackHole = new WritableStream({
                     write(chunk) {
                         // do nothing
-                        console.log(chunk.length)
+                        reiceive += chunk.length
+                        console.log(reiceive)
                     }
                 })
                 fetchRetry(url, { mode: "cors" }).pipeTo(blackHole)
