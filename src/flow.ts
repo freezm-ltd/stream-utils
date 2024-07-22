@@ -20,6 +20,7 @@ export class Flowmeter<T> extends EventTarget2 {
     protected buffer: Array<FlowSensorValue> = []
     protected lastWatchInfo: FlowInfo
     protected listenerWeakMap: WeakMap<FlowTrigger, EventListener2> = new WeakMap()
+    protected closed = false
 
     constructor(
         readonly sensor: FlowSensor<T>,
@@ -27,7 +28,7 @@ export class Flowmeter<T> extends EventTarget2 {
     ) {
         super()
         this.lastWatchInfo = { time: Date.now(), value: 0, delta: 0, interval: 0, flow: 0 }
-        setInterval(this.watch, interval)
+        setInterval(() => this.watch(), interval)
     }
 
     // custom trigger depends on flow info
@@ -38,7 +39,7 @@ export class Flowmeter<T> extends EventTarget2 {
         const listener = async (e: CustomEvent<FlowInfo>) => {
             const info = e.detail
             if (await trigger(info)) { // initiate timeout for callback
-                if (!timeout) timeout = (globalThis as WindowOrWorkerGlobalScope).setTimeout(callback, triggerDuration);
+                if (!timeout) timeout = (globalThis as WindowOrWorkerGlobalScope).setTimeout(() => { if (!this.closed) callback() }, triggerDuration);
             } else { // clear timeout
                 if (timeout) clearTimeout(timeout);
                 timeout = null
@@ -78,6 +79,10 @@ export class Flowmeter<T> extends EventTarget2 {
             transform(chunk, controller) {
                 controller.enqueue(chunk)
                 _this.process(chunk)
+            },
+            flush() {
+                _this.closed = true
+                _this.destroy()
             }
         })
     }

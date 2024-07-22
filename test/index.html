@@ -9,16 +9,44 @@
 
 <body>
     <script type="module">
-        import { fetchRetry } from "./index.js"
+        import { fetchRetry, mergeStream } from "./index.js"
 
-        window.test = (url) => {
-            const blackHole = new WritableStream({
-                write(chunk) {
-                    // do nothing
-                    console.log(chunk.length)
+        window.test = {
+            fetchRetry: (url) => {
+                const blackHole = new WritableStream({
+                    write(chunk) {
+                        // do nothing
+                        console.log(chunk.length)
+                    }
+                })
+                fetchRetry(url, { mode: "cors" }).pipeTo(blackHole)
+            },
+            mergeStream: (number = 10) => {
+                const gens = []
+                for (let i = 0; i < number; i++) {
+                    gens.push(() => new ReadableStream({
+                        start(controller) {
+                            let j = 0
+                            const interval = setInterval(() => {
+                                if (j >= number) {
+                                    controller.close();
+                                    clearInterval(interval)
+                                    return
+                                }
+                                controller.enqueue(j + i * number)
+                                j++
+                            }, 50 + 150 * Math.random())
+                        }
+                    }))
                 }
-            })
-            fetchRetry(url).pipeTo(blackHole)
+                const blackHole = new WritableStream({
+                    write(chunk) {
+                        // do nothing
+                        console.log(chunk)
+                    }
+                })
+                mergeStream(4, gens).pipeTo(blackHole)
+            }
         }
     </script>
 </body>

@@ -1,4 +1,7 @@
-import { StreamGenerator } from "./repipe";
+import { Flowmeter } from "./flow";
+import { StreamGenerator, SwitchableStream } from "./repipe";
+import { fitStream, getFitter, byteFitter } from "./fit";
+import { mergeStream } from "./merge";
 export type RetryOption = {
     minSpeed: number;
     minDuration: number;
@@ -7,3 +10,4 @@ export declare function streamRetry<T>(readableGenerator: StreamGenerator<Readab
 export declare function fetchRetry(input: RequestInfo | URL, init?: RequestInit, option?: RetryOption & {
     slowDown: number;
 }): ReadableStream<Uint8Array>;
+export { Flowmeter, SwitchableStream, fitStream, getFitter, byteFitter, mergeStream, };

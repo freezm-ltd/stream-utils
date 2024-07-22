@@ -10,10 +10,10 @@ export class SwitchableStream {
     protected abortReason = crypto.randomUUID() // for identify abort
 
     constructor(
-        readonly readableGenerator: StreamGenerator<ReadableStream>, 
+        readonly readableGenerator: StreamGenerator<ReadableStream>,
         readonly writableGenerator: StreamGenerator<WritableStream>,
         readableStrategy?: QueuingStrategy,
-        writableStrategy?: QueuingStrategy, 
+        writableStrategy?: QueuingStrategy,
     ) {
         const { readable, writable } = new TransformStream(undefined, writableStrategy, readableStrategy)
         this.readable = readable
@@ -27,7 +27,7 @@ export class SwitchableStream {
     async switchReadable(to?: ReadableStream) {
         this.readableAbortContorller.abort(this.abortReason) // abort first
         this.readableAbortContorller = new AbortController()
-        while(!to) {
+        while (!to) {
             try {
                 to = await this.readableGenerator(); // get source
             } catch (e) {
@@ -35,10 +35,10 @@ export class SwitchableStream {
             }
         }
         to.pipeTo(this.writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.readableAbortContorller.signal })
-        .then(() => this.writable.close())
-        .catch(e => {
-            if (e !== this.abortReason) this.switchReadable() // automatic repipe except intended abort
-        })
+            .then(() => this.writable.close())
+            .catch(e => {
+                if (e !== this.abortReason) this.switchReadable() // automatic repipe except intended abort
+            })
     }
 
     //                                      repipe switch
@@ -47,7 +47,7 @@ export class SwitchableStream {
     async switchWritable(to?: WritableStream) {
         this.writableAbortController.abort() // abort first
         this.writableAbortController = new AbortController()
-        while(!to) {
+        while (!to) {
             try {
                 to = await this.writableGenerator(); // get sink
             } catch (e) {
@@ -55,10 +55,10 @@ export class SwitchableStream {
             }
         }
         this.readable.pipeTo(to, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.writableAbortController.signal })
-        .then(() => to.close())
-        .catch(e => {
-            if (e !== this.abortReason) this.switchWritable() // automatic repipe except intended abort
-        })
+            .then(() => to.close())
+            .catch(e => {
+                if (e !== this.abortReason) this.switchWritable() // automatic repipe except intended abort
+            })
     }
 
     abort() { // just abort and do not repipe

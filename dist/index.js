@@ -106,8 +106,9 @@ var Flowmeter = class extends EventTarget2 {
     this.interval = interval;
     this.buffer = [];
     this.listenerWeakMap = /* @__PURE__ */ new WeakMap();
+    this.closed = false;
     this.lastWatchInfo = { time: Date.now(), value: 0, delta: 0, interval: 0, flow: 0 };
-    setInterval(this.watch, interval);
+    setInterval(() => this.watch(), interval);
   }
   // custom trigger depends on flow info
   // callback if trigger===true duration overs triggerDuration
@@ -117,7 +118,9 @@ var Flowmeter = class extends EventTarget2 {
     const listener = async (e) => {
       const info = e.detail;
       if (await trigger(info)) {
-        if (!timeout) timeout = globalThis.setTimeout(callback, triggerDuration);
+        if (!timeout) timeout = globalThis.setTimeout(() => {
+          if (!this.closed) callback();
+        }, triggerDuration);
       } else {
         if (timeout) clearTimeout(timeout);
         timeout = null;
@@ -154,6 +157,10 @@ var Flowmeter = class extends EventTarget2 {
       transform(chunk, controller) {
         controller.enqueue(chunk);
         _this.process(chunk);
+      },
+      flush() {
+        _this.closed = true;
+        _this.destroy();
       }
     });
   }
@@ -211,13 +218,120 @@ var SwitchableStream = class {
   }
 };
 
+// src/fit.ts
+function fitStream(size, fitter) {
+  const buffer = [];
+  return new TransformStream({
+    transform(chunk, controller) {
+      buffer.push(chunk);
+      const fitteds = fitter(size, buffer);
+      for (let fitted of fitteds) controller.enqueue(fitted);
+    },
+    flush(controller) {
+      for (let remain of buffer) controller.enqueue(remain);
+    }
+  });
+}
+function getFitter(measurer, splicer, slicer) {
+  return (size, chunks) => {
+    const result = [];
+    let buffer;
+    for (let chunk of chunks.splice(0, chunks.length)) {
+      const temp = buffer ? splicer([buffer, chunk]) : chunk;
+      const total = measurer(temp);
+      const fitable = Math.floor(total / size);
+      for (let i = 0; i < fitable; i++) {
+        result.push(slicer(temp, i * size, (i + 1) * size));
+      }
+      buffer = slicer(temp, fitable * size, total);
+    }
+    if (buffer) chunks.push(buffer);
+  };
+}
+function byteFitter() {
+  return getFitter(
+    (chunk) => chunk.length,
+    (chunks) => {
+      const result = new Uint8Array(chunks.reduce((a, b) => a + b.length, 0));
+      let index = 0;
+      for (let chunk of chunks) {
+        result.set(chunk, index);
+        index += chunk.length;
+      }
+      return result;
+    },
+    (chunk, start, end) => chunk.slice(start, end)
+  );
+}
+
 // src/utils.ts
 async function sleep(ms) {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve();
-    }, ms);
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// src/slice.ts
+function sliceStream(start, end = Number.POSITIVE_INFINITY, measurer, slicer) {
+  let index = 0;
+  return new TransformStream({
+    transform(chunk, controller) {
+      const size = measurer(chunk);
+      const nextIndex = index + size;
+      if (start <= index && nextIndex <= end) {
+        controller.enqueue(chunk);
+      } else if (index <= start && end <= nextIndex) {
+        controller.enqueue(slicer(chunk, start - index, end - index));
+      } else if (index <= start && start < nextIndex) {
+        controller.enqueue(slicer(chunk, start - index, size));
+      } else if (index < end && end <= nextIndex) {
+        controller.enqueue(slicer(chunk, 0, end - index));
+      } else {
+      }
+      index = nextIndex;
+    }
   });
+}
+function sliceByteStream(start, end) {
+  return sliceStream(
+    start,
+    end,
+    (chunk) => chunk.length,
+    (chunk, start2, end2) => chunk.slice(start2, end2)
+  );
+}
+
+// src/merge.ts
+function mergeStream(parallel, generators) {
+  const { readable, writable } = new TransformStream();
+  const emitter = new EventTarget2();
+  const buffer = {};
+  const load = async (index2) => {
+    if (!generators[index2]) return;
+    buffer[index2] = await generators[index2]();
+    emitter.dispatch("load", index2);
+  };
+  for (let i = 0; i < generators.length; i++) {
+    emitter.listenOnceOnly("next", () => load(i), (e) => e.detail === i);
+  }
+  let index = 0;
+  const task = async () => {
+    while (index < generators.length) {
+      if (!buffer[index]) await emitter.waitFor("load", index);
+      try {
+        await buffer[index].pipeTo(writable, { preventClose: true });
+      } catch (e) {
+        Object.values(buffer).forEach((stream) => stream.cancel(e).catch(
+          /* silent catch */
+        ));
+        throw e;
+      }
+      emitter.dispatch("next", index + parallel);
+      index++;
+    }
+    await writable.close();
+  };
+  task();
+  for (let i = 0; i < parallel; i++) load(i);
+  return readable;
 }
 
 // src/index.ts
@@ -231,24 +345,55 @@ function streamRetry(readableGenerator, sensor, option) {
 function fetchRetry(input, init, option = { slowDown: 5e3, minSpeed: 5120, minDuration: 1e4 }) {
   let start = -1;
   let end = -1;
+  let first = true;
+  if (init && init.headers) {
+    const headers = init.headers;
+    let range = "";
+    if (headers instanceof Headers) range = headers.get("Range") || "";
+    else if (headers instanceof Array) range = (headers.find(([key, _]) => key.toLocaleLowerCase() === "range") || [, ""])[1];
+    else range = headers["Range"] || headers["range"] || "";
+    if (range) {
+      const [_, _start, _end] = /bytes=(\d+)-(\d+)?/.exec(range) || [];
+      if (_start) start = Number(_start);
+      if (_end) end = Number(_end);
+    }
+  }
   const sensor = (chunk) => {
     const length = chunk.length;
     start += length;
     return length;
   };
   const readableGenerator = async () => {
-    if (start !== -1) await sleep(option.slowDown);
-    if (!init) init = { headers: { Range: `bytes=${start}-${end !== -1 ? end : ""}` } };
+    if (!first) await sleep(option.slowDown);
+    first = false;
+    if (start !== -1) {
+      const Range = `bytes=${start}-${end !== -1 ? end : ""}`;
+      if (!init) init = {};
+      if (!init.headers) init.headers = new Headers({ Range });
+      else if (init.headers instanceof Headers) init.headers.set("Range", Range);
+      else if (init.headers instanceof Array) {
+        const found = init.headers.find(([key, _]) => key.toLocaleLowerCase() === "range");
+        if (found) found[1] = Range;
+        else init.headers.push(["Range", Range]);
+      } else if (init.headers) init.headers["Range"] = Range;
+    }
     const response = await fetch(input, init);
-    if (!response.body) throw new Error("Error: Cannot find response body");
-    const [match, _start, _end] = /bytes (\d+)-(\d+)/.exec(response.headers.get("Content-Range") || "") || [];
-    if (!match) throw new Error("Error: Range request not supported");
-    [start, end] = [Number(start), Number(end ? end : -1)];
-    return response.body;
+    let stream = response.body;
+    if (!stream) throw new Error("Error: Cannot find response body");
+    if (!response.headers.get("Content-Range") && start !== -1) {
+      stream = stream.pipeThrough(sliceByteStream(start, end !== -1 ? end : void 0));
+    }
+    return stream;
   };
   return streamRetry(readableGenerator, sensor, option);
 }
 export {
+  Flowmeter,
+  SwitchableStream,
+  byteFitter,
   fetchRetry,
+  fitStream,
+  getFitter,
+  mergeStream,
   streamRetry
 };

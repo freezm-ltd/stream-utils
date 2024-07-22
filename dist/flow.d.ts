@@ -18,6 +18,7 @@ export declare class Flowmeter<T> extends EventTarget2 {
     protected buffer: Array<FlowSensorValue>;
     protected lastWatchInfo: FlowInfo;
     protected listenerWeakMap: WeakMap<FlowTrigger, EventListener2>;
+    protected closed: boolean;
     constructor(sensor: FlowSensor<T>, interval?: number);
     addTrigger(trigger: FlowTrigger, callback: () => any, triggerDuration?: number): void;
     delTrigger(trigger: FlowTrigger): void;
