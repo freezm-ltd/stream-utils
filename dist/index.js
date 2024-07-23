@@ -1,4 +1,4 @@
-// node_modules/.pnpm/@freezm-ltd+event-target-2@https+++codeload.github.com+freezm-ltd+EventTarget2+tar.gz+799deba_oblkccuzqonyswgluuenu6fpzq/node_modules/@freezm-ltd/event-target-2/dist/index.js
+// node_modules/.pnpm/@freezm-ltd+event-target-2@https+++codeload.github.com+freezm-ltd+EventTarget2+tar.gz+ab35de5_waf2g56p5kfzme2plmhrbk5cai/node_modules/@freezm-ltd/event-target-2/dist/index.js
 var EventTarget2 = class extends EventTarget {
   constructor() {
     super(...arguments);
@@ -8,7 +8,7 @@ var EventTarget2 = class extends EventTarget {
   }
   async waitFor(type, compareValue) {
     return new Promise((resolve) => {
-      if (compareValue) {
+      if (compareValue !== void 0) {
         this.listenOnceOnly(type, resolve, (e) => e.detail === compareValue);
       } else {
         this.listenOnce(type, resolve);
@@ -19,7 +19,7 @@ var EventTarget2 = class extends EventTarget {
     this.waitFor(type).then((result) => callback(result));
   }
   dispatch(type, detail) {
-    this.dispatchEvent(new CustomEvent(type, detail ? { detail } : void 0));
+    this.dispatchEvent(new CustomEvent(type, detail !== void 0 ? { detail } : void 0));
   }
   listen(type, callback, options) {
     if (!this.listeners.has(type)) this.listeners.set(type, /* @__PURE__ */ new Set());
@@ -133,6 +133,19 @@ var Flowmeter = class extends EventTarget2 {
     this.closed = false;
     this.lastWatchInfo = { time: Date.now(), value: 0, delta: 0, interval: 0, flow: 0 };
     setInterval(() => this.watch(), interval);
+    const _this = this;
+    const { readable, writable } = new TransformStream({
+      transform(chunk, controller) {
+        controller.enqueue(chunk);
+        _this.process(chunk);
+      },
+      flush() {
+        _this.closed = true;
+        _this.destroy();
+      }
+    });
+    this.readable = readable;
+    this.writable = writable;
   }
   // custom trigger depends on flow info
   // callback if trigger===true duration overs triggerDuration
@@ -174,19 +187,6 @@ var Flowmeter = class extends EventTarget2 {
     const time = Date.now();
     const value = this.sensor(chunk);
     this.buffer.push({ time, value });
-  }
-  get tube() {
-    const _this = this;
-    return new TransformStream({
-      transform(chunk, controller) {
-        controller.enqueue(chunk);
-        _this.process(chunk);
-      },
-      flush() {
-        _this.closed = true;
-        _this.destroy();
-      }
-    });
   }
 };
 
@@ -337,20 +337,18 @@ function sliceByteStream(start, end) {
 }
 
 // src/merge.ts
-function mergeStream(parallel, generators) {
-  const { readable, writable } = new TransformStream();
+function mergeStream(parallel, generators, writableStrategy, readableStrategy) {
+  const { readable, writable } = new TransformStream(void 0, writableStrategy, readableStrategy);
   const emitter = new EventTarget2();
   const buffer = {};
-  const load = async (index2) => {
-    if (!generators[index2]) return;
-    buffer[index2] = await generators[index2]();
-    emitter.dispatch("load", index2);
+  const load = async (index) => {
+    if (index >= generators.length) return;
+    buffer[index] = await generators[index]();
+    emitter.dispatch("load", index);
   };
-  for (let i = 0; i < generators.length; i++) {
-    emitter.listenOnceOnly("next", () => load(i), (e) => e.detail === i);
-  }
-  let index = 0;
+  emitter.listen("next", (e) => load(e.detail));
   const task = async () => {
+    let index = 0;
     while (index < generators.length) {
       if (!buffer[index]) await emitter.waitFor("load", index);
       try {
@@ -365,6 +363,7 @@ function mergeStream(parallel, generators) {
       index++;
     }
     await writable.close();
+    emitter.destroy();
   };
   task();
   for (let i = 0; i < parallel; i++) load(i);
@@ -374,7 +373,7 @@ function mergeStream(parallel, generators) {
 // src/index.ts
 function streamRetry(readableGenerator, sensor, option) {
   const flowmeter = new Flowmeter(sensor);
-  const { readable, writable } = flowmeter.tube;
+  const { readable, writable } = flowmeter;
   const switchableStream = new SwitchableStream(readableGenerator, () => writable);
   flowmeter.addTrigger((info) => info.flow < option.minSpeed, switchableStream.switchReadable, option.minDuration);
   return readable;

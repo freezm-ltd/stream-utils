@@ -19,10 +19,11 @@ export declare class Flowmeter<T> extends EventTarget2 {
     protected lastWatchInfo: FlowInfo;
     protected listenerWeakMap: WeakMap<FlowTrigger, EventListener2>;
     protected closed: boolean;
+    readonly readable: ReadableStream<T>;
+    readonly writable: WritableStream<T>;
     constructor(sensor: FlowSensor<T>, interval?: number);
     addTrigger(trigger: FlowTrigger, callback: () => any, triggerDuration?: number): void;
     delTrigger(trigger: FlowTrigger): void;
     protected watch(): void;
     protected process(chunk: T): void;
-    get tube(): TransformStream<T, T>;
 }

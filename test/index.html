@@ -26,19 +26,23 @@
             mergeStream: (number = 10) => {
                 const gens = []
                 for (let i = 0; i < number; i++) {
-                    gens.push(() => new ReadableStream({
-                        start(controller) {
-                            let j = 0
-                            const interval = setInterval(() => {
-                                if (j >= number) {
+                    gens.push(() => new Promise((resolve) => {
+                        setTimeout(() => {
+                            resolve(new ReadableStream({
+                                async start(controller) {
+                                    let j = 0
+                                    while (j < number) {
+                                        await new Promise((resolve) => {
+                                            setTimeout(() => {
+                                                resolve(controller.enqueue(j + i * number))
+                                            }, 500 * Math.random());
+                                        })
+                                        j++
+                                    }
                                     controller.close();
-                                    clearInterval(interval)
-                                    return
                                 }
-                                controller.enqueue(j + i * number)
-                                j++
-                            }, 50 + 150 * Math.random())
-                        }
+                            }))
+                        }, 1000 * Math.random())
                     }))
                 }
                 const blackHole = new WritableStream({

@@ -21,6 +21,8 @@ export class Flowmeter<T> extends EventTarget2 {
     protected lastWatchInfo: FlowInfo
     protected listenerWeakMap: WeakMap<FlowTrigger, EventListener2> = new WeakMap()
     protected closed = false
+    readonly readable: ReadableStream<T>
+    readonly writable: WritableStream<T>
 
     constructor(
         readonly sensor: FlowSensor<T>,
@@ -29,6 +31,21 @@ export class Flowmeter<T> extends EventTarget2 {
         super()
         this.lastWatchInfo = { time: Date.now(), value: 0, delta: 0, interval: 0, flow: 0 }
         setInterval(() => this.watch(), interval)
+
+        // to measure flow, pipeThrough this
+        const _this = this
+        const { readable, writable } = new TransformStream<T, T>({
+            transform(chunk, controller) {
+                controller.enqueue(chunk)
+                _this.process(chunk)
+            },
+            flush() {
+                _this.closed = true
+                _this.destroy()
+            }
+        })
+        this.readable = readable
+        this.writable = writable
     }
 
     // custom trigger depends on flow info
@@ -71,19 +88,5 @@ export class Flowmeter<T> extends EventTarget2 {
         const time = Date.now()
         const value = this.sensor(chunk)
         this.buffer.push({ time, value })
-    }
-
-    get tube() { // To measure, pipeThrough this
-        const _this = this
-        return new TransformStream<T, T>({
-            transform(chunk, controller) {
-                controller.enqueue(chunk)
-                _this.process(chunk)
-            },
-            flush() {
-                _this.closed = true
-                _this.destroy()
-            }
-        })
     }
 }

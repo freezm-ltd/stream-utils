@@ -16,8 +16,8 @@ export type RetryOption = {
 export function streamRetry<T>(readableGenerator: StreamGenerator<ReadableStream<T>>, sensor: (chunk: T) => number, option: RetryOption) {
     // add flowmeter
     const flowmeter = new Flowmeter(sensor)
-    const { readable, writable } = flowmeter.tube // sense flow
-
+    const { readable, writable } = flowmeter // sense flow
+    
     // add switchablestream
     const switchableStream = new SwitchableStream(readableGenerator, () => writable)
 
@@ -27,6 +27,7 @@ export function streamRetry<T>(readableGenerator: StreamGenerator<ReadableStream
     return readable
 }
 
+// retrying request
 export function fetchRetry(input: RequestInfo | URL, init?: RequestInit, option: RetryOption & { slowDown: number } = { slowDown: 5000, minSpeed: 5120, minDuration: 10000 }) {
     let start = 0
     let end = 0
@@ -53,7 +54,9 @@ export function fetchRetry(input: RequestInfo | URL, init?: RequestInit, option:
     }
 
     const readableGenerator = async () => {
-        if (!first) await sleep(option.slowDown); first = false; // retry slowdown
+        if (!first) await sleep(option.slowDown); // retry slowdown
+        first = false
+        
         if (start !== 0) { // retry with continuous range
             const Range = `bytes=${start}-${end !== 0 ? end : ""}` // inject request.headers.Range
             if (!init) init = {};
@@ -66,6 +69,7 @@ export function fetchRetry(input: RequestInfo | URL, init?: RequestInit, option:
             }
             else if (init.headers) init.headers["Range"] = Range;
         }
+
         const response = await fetch(input, init)
         let stream = response.body
         if (!stream) throw new Error("Error: Cannot find response body")

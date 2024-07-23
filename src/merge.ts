@@ -2,24 +2,22 @@ import { EventTarget2 } from "@freezm-ltd/event-target-2";
 import { StreamGenerator } from "./repipe";
 
 // merge multiple streams, parallel loading and sequential piping
-// need to mind parallel option when stream's total size is unknown, can cause OOM
-export function mergeStream<T>(parallel: number, generators: Array<StreamGenerator<ReadableStream<T>>>) {
-    const { readable, writable } = new TransformStream<T, T>()
+// need to mind parallel option and strategy when stream's total size is unknown, can cause OOM
+export function mergeStream<T>(parallel: number, generators: Array<StreamGenerator<ReadableStream<T>>>, writableStrategy?: QueuingStrategy<T>, readableStrategy?: QueuingStrategy<T>) {
+    const { readable, writable } = new TransformStream<T, T>(undefined, writableStrategy, readableStrategy)
     const emitter = new EventTarget2() // event emitter
     const buffer: Record<number, ReadableStream<T>> = {} // generated streams
 
     const load = async (index: number) => {
-        if (!generators[index]) return; // out of bound
+        if (index >= generators.length) return; // out of bound
         buffer[index] = await generators[index]() // load stream
         emitter.dispatch("load", index) // call stream loaded
     }
 
-    for (let i = 0; i < generators.length; i++) { // listen for load request
-        emitter.listenOnceOnly("next", () => load(i), (e: CustomEvent<number>) => e.detail === i)
-    }
+    emitter.listen("next", (e: CustomEvent<number>) => load(e.detail))
 
-    let index = 0
     const task = async () => {
+        let index = 0
         while (index < generators.length) {
             if (!buffer[index]) await emitter.waitFor("load", index); // wait for load
             try {
@@ -33,6 +31,7 @@ export function mergeStream<T>(parallel: number, generators: Array<StreamGenerat
             index++
         }
         await writable.close()
+        emitter.destroy()
     }
     task()
 
