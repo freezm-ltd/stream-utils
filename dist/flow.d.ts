@@ -27,3 +27,4 @@ export declare class Flowmeter<T> extends EventTarget2 {
     protected watch(): void;
     protected process(chunk: T): void;
 }
+export declare function lengthCounter(record: Record<any, any>, key: any): TransformStream<any, any>;

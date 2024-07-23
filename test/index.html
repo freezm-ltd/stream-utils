@@ -9,7 +9,7 @@
 
 <body>
     <script type="module">
-        import { fetchRetry, mergeStream } from "./index.js"
+        import { retryableFetchStream, mergeStream } from "./index.js"
 
         window.test = {
             fetchRetry: async (url) => {
@@ -20,7 +20,7 @@
                         controller.enqueue(chunk)
                     }
                 })
-                const stream = fetchRetry(url, { mode: "cors" }, { minSpeed: Number.POSITIVE_INFINITY, minDuration: 5000, slowDown: 1000 }).pipeThrough(counter)
+                const stream = retryableFetchStream(url, { mode: "cors" }, { minSpeed: Number.POSITIVE_INFINITY, minDuration: 5000, slowDown: 1000 }).pipeThrough(counter)
                 const buffer = await (new Response(stream)).arrayBuffer()
                 const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-1", buffer)))
                     .map((b) => b.toString(16).padStart(2, "0"))

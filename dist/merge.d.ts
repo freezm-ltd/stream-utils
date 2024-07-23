@@ -1,2 +1,8 @@
 import { StreamGenerator } from "./repipe";
-export declare function mergeStream<T>(generators: Array<StreamGenerator<ReadableStream<T>>>, parallel?: number, signal?: AbortSignal, writableStrategy?: QueuingStrategy<T>, readableStrategy?: QueuingStrategy<T>): ReadableStream<T>;
+export type MergeOption = {
+    parallel?: number;
+    signal?: AbortSignal;
+    writableStrategy?: QueuingStrategy;
+    readableStrategy?: QueuingStrategy;
+};
+export declare function mergeStream<T>(generators: Array<StreamGenerator<ReadableStream<T>>>, option: MergeOption): ReadableStream<T>;

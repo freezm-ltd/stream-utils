@@ -101,3 +101,14 @@ export class Flowmeter<T> extends EventTarget2 {
         this.buffer.push({ time, value })
     }
 }
+
+export function lengthCounter(record: Record<any, any>, key: any) {
+    let total = record[key]
+    return new TransformStream({
+        transform(chunk, controller) {
+            total += chunk.length
+            record[key] = total
+            controller.enqueue(chunk)
+        }
+    })
+}

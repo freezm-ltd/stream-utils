@@ -2,7 +2,8 @@
 
 import { EventTarget2 } from "@freezm-ltd/event-target-2"
 
-export type StreamGenerator<T = ReadableStream | WritableStream> = (signal?: AbortSignal) => T | PromiseLike<T>
+export type StreamGenerator<T = ReadableStream | WritableStream> = (context: StreamGeneratorContext) => T | PromiseLike<T>
+export type StreamGeneratorContext = { signal?: AbortSignal } & any
 
 export class SwitchableStream extends EventTarget2 {
     protected readonly readable: ReadableStream
@@ -14,6 +15,8 @@ export class SwitchableStream extends EventTarget2 {
     constructor(
         readonly readableGenerator: StreamGenerator<ReadableStream>,
         readonly writableGenerator: StreamGenerator<WritableStream>,
+        readonly readableContext: StreamGeneratorContext = { signal: undefined },
+        readonly writableContext: StreamGeneratorContext = { signal: undefined },
         readableStrategy?: QueuingStrategy,
         writableStrategy?: QueuingStrategy,
     ) {
@@ -34,14 +37,15 @@ export class SwitchableStream extends EventTarget2 {
             this.readableSwitching = true
             this.readableAbortContorller.abort(this.abortReason) // abort previous piping
             this.readableAbortContorller = new AbortController()
+            this.readableContext.signal = this.readableAbortContorller.signal
             while (!to) {
                 try {
-                    to = await this.readableGenerator(this.readableAbortContorller.signal); // get source
+                    to = await this.readableGenerator(this.readableContext); // get source
                 } catch (e) {
                     // slient catch, restart
                 }
             }
-            to.pipeTo(this.writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.readableAbortContorller.signal })
+            to.pipeTo(this.writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.readableContext.signal })
                 .then(() => {
                     this.writable.close()
                 })
@@ -62,14 +66,15 @@ export class SwitchableStream extends EventTarget2 {
             this.writableSwitching = true
             this.writableAbortController.abort(this.abortReason) // abort previous piping
             this.writableAbortController = new AbortController()
+            this.writableContext.signal = this.writableAbortController.signal
             while (!to) {
                 try {
-                    to = await this.writableGenerator(this.writableAbortController.signal); // get sink
+                    to = await this.writableGenerator(this.writableContext); // get sink
                 } catch (e) {
                     // slient catch, restart
                 }
             }
-            this.readable.pipeTo(to, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.writableAbortController.signal })
+            this.readable.pipeTo(to, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.writableContext.signal })
                 .then(() => to!.close())
                 .catch(e => {
                     if (e !== this.abortReason) this.switchWritable() // automatic repipe except intended abort

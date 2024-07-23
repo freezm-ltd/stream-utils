@@ -200,14 +200,26 @@ var Flowmeter = class extends EventTarget2 {
     this.buffer.push({ time, value });
   }
 };
+function lengthCounter(record, key) {
+  let total = record[key];
+  return new TransformStream({
+    transform(chunk, controller) {
+      total += chunk.length;
+      record[key] = total;
+      controller.enqueue(chunk);
+    }
+  });
+}
 
 // src/repipe.ts
 var SwitchableStream = class extends EventTarget2 {
   // to identify intended abort
-  constructor(readableGenerator, writableGenerator, readableStrategy, writableStrategy) {
+  constructor(readableGenerator, writableGenerator, readableContext = { signal: void 0 }, writableContext = { signal: void 0 }, readableStrategy, writableStrategy) {
     super();
     this.readableGenerator = readableGenerator;
     this.writableGenerator = writableGenerator;
+    this.readableContext = readableContext;
+    this.writableContext = writableContext;
     this.readableAbortContorller = new AbortController();
     this.writableAbortController = new AbortController();
     this.abortReason = "SwitchableStreamAbortForSwitching";
@@ -230,13 +242,14 @@ var SwitchableStream = class extends EventTarget2 {
       this.readableSwitching = true;
       this.readableAbortContorller.abort(this.abortReason);
       this.readableAbortContorller = new AbortController();
+      this.readableContext.signal = this.readableAbortContorller.signal;
       while (!to) {
         try {
-          to = await this.readableGenerator(this.readableAbortContorller.signal);
+          to = await this.readableGenerator(this.readableContext);
         } catch (e) {
         }
       }
-      to.pipeTo(this.writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.readableAbortContorller.signal }).then(() => {
+      to.pipeTo(this.writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.readableContext.signal }).then(() => {
         this.writable.close();
       }).catch((e) => {
         if (e !== this.abortReason) this.switchReadable();
@@ -250,13 +263,14 @@ var SwitchableStream = class extends EventTarget2 {
       this.writableSwitching = true;
       this.writableAbortController.abort(this.abortReason);
       this.writableAbortController = new AbortController();
+      this.writableContext.signal = this.writableAbortController.signal;
       while (!to) {
         try {
-          to = await this.writableGenerator(this.writableAbortController.signal);
+          to = await this.writableGenerator(this.writableContext);
         } catch (e) {
         }
       }
-      this.readable.pipeTo(to, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.writableAbortController.signal }).then(() => to.close()).catch((e) => {
+      this.readable.pipeTo(to, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.writableContext.signal }).then(() => to.close()).catch((e) => {
         if (e !== this.abortReason) this.switchWritable();
       });
       this.writableSwitching = false;
@@ -314,14 +328,6 @@ function byteFitter() {
   );
 }
 
-// src/utils.ts
-function mergeSignal(signal1, signal2) {
-  const controller = new AbortController();
-  signal1.onabort = (e) => controller.abort(e.target.reason);
-  signal2.onabort = (e) => controller.abort(e.target.reason);
-  return controller.signal;
-}
-
 // src/slice.ts
 function sliceStream(start, end = Number.POSITIVE_INFINITY, measurer, slicer) {
   let index = 0;
@@ -353,13 +359,15 @@ function sliceByteStream(start, end) {
 }
 
 // src/merge.ts
-function mergeStream(generators, parallel = 1, signal, writableStrategy, readableStrategy) {
-  const { readable, writable } = new TransformStream(void 0, writableStrategy, readableStrategy);
+function mergeStream(generators, option) {
+  const { readable, writable } = new TransformStream(void 0, option.writableStrategy, option.readableStrategy);
   const emitter = new EventTarget2();
   const buffer = {};
+  const signal = option.signal;
+  const parallel = option.parallel || 1;
   const load = async (index) => {
     if (index >= generators.length) return;
-    buffer[index] = await generators[index](signal);
+    buffer[index] = await generators[index]({ signal });
     emitter.dispatch("load", index);
   };
   emitter.listen("next", (e) => load(e.detail));
@@ -386,20 +394,28 @@ function mergeStream(generators, parallel = 1, signal, writableStrategy, readabl
   return readable;
 }
 
-// src/index.ts
-function streamRetry(readableGenerator, sensor, option) {
+// src/utils.ts
+function mergeSignal(signal1, signal2) {
+  const controller = new AbortController();
+  signal1.onabort = (e) => controller.abort(e.target.reason);
+  signal2.onabort = (e) => controller.abort(e.target.reason);
+  return controller.signal;
+}
+
+// src/retry.ts
+function retryableStream(context, readableGenerator, option, sensor) {
   let _option = { slowDown: 5e3, minSpeed: 5120, minDuration: 1e4 };
   Object.assign(_option, option);
   option = _option;
+  if (!sensor) sensor = (any) => any.length;
   const flowmeter = new Flowmeter(sensor);
   const { readable, writable } = flowmeter;
-  const switchableStream = new SwitchableStream(readableGenerator, () => writable);
+  const switchableStream = new SwitchableStream(readableGenerator, () => writable, context);
   flowmeter.addTrigger((info) => option.minSpeed ? info.flow <= option.minSpeed : false, () => switchableStream.switchReadable(), option.minDuration, option.slowDown);
   return readable;
 }
-function fetchRetry(input, init, option) {
-  let start = 0;
-  let end = 0;
+function retryableFetchStream(input, init, option) {
+  const context = { start: 0, end: 0 };
   if (init && init.headers) {
     const headers = init.headers;
     let range = "";
@@ -407,17 +423,13 @@ function fetchRetry(input, init, option) {
     else if (headers instanceof Array) range = (headers.find(([key, _]) => key.toLocaleLowerCase() === "range") || [, ""])[1];
     else range = headers["Range"] || headers["range"] || "";
     if (range) {
-      const [_, _start, _end] = /bytes=(\d+)-(\d+)?/.exec(range) || [];
-      if (_start) start = Number(_start);
-      if (_end) end = Number(_end);
+      const [_, start, end] = /bytes=(\d+)-(\d+)?/.exec(range) || [];
+      if (start) context.start = Number(start);
+      if (end) context.end = Number(end);
     }
   }
-  const sensor = (chunk) => {
-    const length = chunk.length;
-    start += length;
-    return length;
-  };
-  const readableGenerator = async (signal) => {
+  const readableGenerator = async (context2) => {
+    const { start, end } = context2;
     if (!init) init = {};
     if (start !== 0) {
       const Range = `bytes=${start}-${end !== 0 ? end : ""}`;
@@ -429,6 +441,7 @@ function fetchRetry(input, init, option) {
         else init.headers.push(["Range", Range]);
       } else if (init.headers) init.headers["Range"] = Range;
     }
+    const signal = context2?.signal;
     init.signal = signal ? init.signal ? mergeSignal(init.signal, signal) : signal : init.signal;
     const response = await fetch(input, init);
     let stream = response.body;
@@ -436,19 +449,21 @@ function fetchRetry(input, init, option) {
     if (response.status !== 206 && !response.headers.get("Content-Range") && start !== 0) {
       stream = stream.pipeThrough(sliceByteStream(start, end !== 0 ? end : void 0));
     }
+    stream = stream.pipeThrough(lengthCounter(context2, "start"));
     return stream;
   };
-  return streamRetry(readableGenerator, sensor, option);
+  return retryableStream(context, readableGenerator, option);
 }
 export {
   Flowmeter,
   SwitchableStream,
   byteFitter,
-  fetchRetry,
   fitStream,
   getFitter,
+  lengthCounter,
   mergeStream,
+  retryableFetchStream,
+  retryableStream,
   sliceByteStream,
-  sliceStream,
-  streamRetry
+  sliceStream
 };
