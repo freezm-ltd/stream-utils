@@ -394,7 +394,7 @@ function streamRetry(readableGenerator, sensor, option) {
   const flowmeter = new Flowmeter(sensor);
   const { readable, writable } = flowmeter;
   const switchableStream = new SwitchableStream(readableGenerator, () => writable);
-  flowmeter.addTrigger((info) => option.minSpeed ? info.flow < option.minSpeed : false, () => switchableStream.switchReadable(), option.minDuration, option.slowDown);
+  flowmeter.addTrigger((info) => option.minSpeed ? info.flow <= option.minSpeed : false, () => switchableStream.switchReadable(), option.minDuration, option.slowDown);
   return readable;
 }
 function fetchRetry(input, init, option) {

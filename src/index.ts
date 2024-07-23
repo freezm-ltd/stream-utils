@@ -27,7 +27,7 @@ export function streamRetry<T>(readableGenerator: StreamGenerator<ReadableStream
     const switchableStream = new SwitchableStream(readableGenerator, () => writable)
 
     // add trigger
-    flowmeter.addTrigger(info => option.minSpeed ? info.flow < option.minSpeed : false, () => switchableStream.switchReadable(), option.minDuration, option.slowDown)
+    flowmeter.addTrigger(info => option.minSpeed ? info.flow <= option.minSpeed : false, () => switchableStream.switchReadable(), option.minDuration, option.slowDown)
 
     return readable
 }
