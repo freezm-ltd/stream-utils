@@ -1,5 +1,5 @@
 {
-  "name": "stream-utils",
+  "name": "@freezm-ltd/stream-utils",
   "version": "0.0.1",
   "type": "module",
   "description": "Browser javascript stream utils",
