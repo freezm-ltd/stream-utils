@@ -3,14 +3,14 @@ import { StreamGenerator } from "./repipe";
 
 // merge multiple streams, parallel loading and sequential piping
 // need to mind parallel option and strategy when stream's total size is unknown, can cause OOM
-export function mergeStream<T>(parallel: number, generators: Array<StreamGenerator<ReadableStream<T>>>, writableStrategy?: QueuingStrategy<T>, readableStrategy?: QueuingStrategy<T>) {
+export function mergeStream<T>(generators: Array<StreamGenerator<ReadableStream<T>>>, parallel: number = 1, signal?: AbortSignal, writableStrategy?: QueuingStrategy<T>, readableStrategy?: QueuingStrategy<T>) {
     const { readable, writable } = new TransformStream<T, T>(undefined, writableStrategy, readableStrategy)
     const emitter = new EventTarget2() // event emitter
     const buffer: Record<number, ReadableStream<T>> = {} // generated streams
 
     const load = async (index: number) => {
         if (index >= generators.length) return; // out of bound
-        buffer[index] = await generators[index]() // load stream
+        buffer[index] = await generators[index](signal) // load stream
         emitter.dispatch("load", index) // call stream loaded
     }
 

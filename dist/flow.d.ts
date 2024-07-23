@@ -22,7 +22,7 @@ export declare class Flowmeter<T> extends EventTarget2 {
     readonly readable: ReadableStream<T>;
     readonly writable: WritableStream<T>;
     constructor(sensor: FlowSensor<T>, interval?: number);
-    addTrigger(trigger: FlowTrigger, callback: () => any, triggerDuration?: number): void;
+    addTrigger(trigger: FlowTrigger, callback: () => any, triggerDuration?: number, slowDown?: number): void;
     delTrigger(trigger: FlowTrigger): void;
     protected watch(): void;
     protected process(chunk: T): void;

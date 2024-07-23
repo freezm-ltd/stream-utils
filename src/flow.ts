@@ -50,13 +50,24 @@ export class Flowmeter<T> extends EventTarget2 {
 
     // custom trigger depends on flow info
     // callback if trigger===true duration overs triggerDuration
-    addTrigger(trigger: FlowTrigger, callback: () => any, triggerDuration: number = 10_000) {
+    // if trigger fired, other triggers skipped while slowDown
+    addTrigger(trigger: FlowTrigger, callback: () => any, triggerDuration: number = 10_000, slowDown: number = 5_000) {
         if (this.listenerWeakMap.has(trigger)) throw new Error("FlowmeterAddTriggerError: Duplication of trigger is not allowed");
         let timeout: number | null = null
+        let skip = false
+        const setTimeout = (globalThis as WindowOrWorkerGlobalScope).setTimeout
         const listener = async (e: CustomEvent<FlowInfo>) => {
             const info = e.detail
-            if (await trigger(info)) { // initiate timeout for callback
-                if (!timeout) timeout = (globalThis as WindowOrWorkerGlobalScope).setTimeout(() => { if (!this.closed) callback() }, triggerDuration);
+            if (await trigger(info)) { // if triggered
+                if (!timeout && !skip) {
+                    const handler = () => {
+                        if (!this.closed) callback(); // trigger callback
+                        timeout = null
+                        skip = true; // apply slowDown
+                        setTimeout(() => { skip = false }, slowDown); // slowDown timeout
+                    }
+                    timeout = setTimeout(handler, triggerDuration); // initiate timeout
+                }
             } else { // clear timeout
                 if (timeout) clearTimeout(timeout);
                 timeout = null

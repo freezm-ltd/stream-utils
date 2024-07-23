@@ -149,15 +149,26 @@ var Flowmeter = class extends EventTarget2 {
   }
   // custom trigger depends on flow info
   // callback if trigger===true duration overs triggerDuration
-  addTrigger(trigger, callback, triggerDuration = 1e4) {
+  // if trigger fired, other triggers skipped while slowDown
+  addTrigger(trigger, callback, triggerDuration = 1e4, slowDown = 5e3) {
     if (this.listenerWeakMap.has(trigger)) throw new Error("FlowmeterAddTriggerError: Duplication of trigger is not allowed");
     let timeout = null;
+    let skip = false;
+    const setTimeout2 = globalThis.setTimeout;
     const listener = async (e) => {
       const info = e.detail;
       if (await trigger(info)) {
-        if (!timeout) timeout = globalThis.setTimeout(() => {
-          if (!this.closed) callback();
-        }, triggerDuration);
+        if (!timeout && !skip) {
+          const handler = () => {
+            if (!this.closed) callback();
+            timeout = null;
+            skip = true;
+            setTimeout2(() => {
+              skip = false;
+            }, slowDown);
+          };
+          timeout = setTimeout2(handler, triggerDuration);
+        }
       } else {
         if (timeout) clearTimeout(timeout);
         timeout = null;
@@ -192,14 +203,14 @@ var Flowmeter = class extends EventTarget2 {
 
 // src/repipe.ts
 var SwitchableStream = class extends EventTarget2 {
-  // for identify abort
+  // to identify intended abort
   constructor(readableGenerator, writableGenerator, readableStrategy, writableStrategy) {
     super();
     this.readableGenerator = readableGenerator;
     this.writableGenerator = writableGenerator;
     this.readableAbortContorller = new AbortController();
     this.writableAbortController = new AbortController();
-    this.abortReason = crypto.randomUUID();
+    this.abortReason = "SwitchableStreamAbortForSwitching";
     // switch repipe
     //    |    |
     // source -> this.writable -> this.readable -> sink
@@ -217,15 +228,17 @@ var SwitchableStream = class extends EventTarget2 {
     if (!to && this.readableSwitching) return;
     return this.atomic("switch-readable", async () => {
       this.readableSwitching = true;
+      this.readableAbortContorller.abort(this.abortReason);
+      this.readableAbortContorller = new AbortController();
       while (!to) {
         try {
-          to = await this.readableGenerator();
+          to = await this.readableGenerator(this.readableAbortContorller.signal);
         } catch (e) {
         }
       }
-      this.readableAbortContorller.abort(this.abortReason);
-      this.readableAbortContorller = new AbortController();
-      to.pipeTo(this.writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.readableAbortContorller.signal }).then(() => this.writable.close()).catch((e) => {
+      to.pipeTo(this.writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.readableAbortContorller.signal }).then(() => {
+        this.writable.close();
+      }).catch((e) => {
         if (e !== this.abortReason) this.switchReadable();
       });
       this.readableSwitching = false;
@@ -235,14 +248,14 @@ var SwitchableStream = class extends EventTarget2 {
     if (!to && this.writableSwitching) return;
     return this.atomic("switch-writable", async () => {
       this.writableSwitching = true;
+      this.writableAbortController.abort(this.abortReason);
+      this.writableAbortController = new AbortController();
       while (!to) {
         try {
-          to = await this.writableGenerator();
+          to = await this.writableGenerator(this.writableAbortController.signal);
         } catch (e) {
         }
       }
-      this.writableAbortController.abort(this.abortReason);
-      this.writableAbortController = new AbortController();
       this.readable.pipeTo(to, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.writableAbortController.signal }).then(() => to.close()).catch((e) => {
         if (e !== this.abortReason) this.switchWritable();
       });
@@ -302,8 +315,11 @@ function byteFitter() {
 }
 
 // src/utils.ts
-async function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function mergeSignal(signal1, signal2) {
+  const controller = new AbortController();
+  signal1.onabort = (e) => controller.abort(e.target.reason);
+  signal2.onabort = (e) => controller.abort(e.target.reason);
+  return controller.signal;
 }
 
 // src/slice.ts
@@ -337,13 +353,13 @@ function sliceByteStream(start, end) {
 }
 
 // src/merge.ts
-function mergeStream(parallel, generators, writableStrategy, readableStrategy) {
+function mergeStream(generators, parallel = 1, signal, writableStrategy, readableStrategy) {
   const { readable, writable } = new TransformStream(void 0, writableStrategy, readableStrategy);
   const emitter = new EventTarget2();
   const buffer = {};
   const load = async (index) => {
     if (index >= generators.length) return;
-    buffer[index] = await generators[index]();
+    buffer[index] = await generators[index](signal);
     emitter.dispatch("load", index);
   };
   emitter.listen("next", (e) => load(e.detail));
@@ -375,13 +391,15 @@ function streamRetry(readableGenerator, sensor, option) {
   const flowmeter = new Flowmeter(sensor);
   const { readable, writable } = flowmeter;
   const switchableStream = new SwitchableStream(readableGenerator, () => writable);
-  flowmeter.addTrigger((info) => info.flow < option.minSpeed, switchableStream.switchReadable, option.minDuration);
+  flowmeter.addTrigger((info) => option.minSpeed ? info.flow < option.minSpeed : false, () => switchableStream.switchReadable(), option.minDuration, option.slowDown);
   return readable;
 }
-function fetchRetry(input, init, option = { slowDown: 5e3, minSpeed: 5120, minDuration: 1e4 }) {
+function fetchRetry(input, init, option) {
+  let _option = { slowDown: 5e3, minSpeed: 5120, minDuration: 1e4 };
+  Object.assign(_option, option);
+  option = _option;
   let start = 0;
   let end = 0;
-  let first = true;
   if (init && init.headers) {
     const headers = init.headers;
     let range = "";
@@ -399,12 +417,10 @@ function fetchRetry(input, init, option = { slowDown: 5e3, minSpeed: 5120, minDu
     start += length;
     return length;
   };
-  const readableGenerator = async () => {
-    if (!first) await sleep(option.slowDown);
-    first = false;
+  const readableGenerator = async (signal) => {
+    if (!init) init = {};
     if (start !== 0) {
       const Range = `bytes=${start}-${end !== 0 ? end : ""}`;
-      if (!init) init = {};
       if (!init.headers) init.headers = new Headers({ Range });
       else if (init.headers instanceof Headers) init.headers.set("Range", Range);
       else if (init.headers instanceof Array) {
@@ -413,10 +429,11 @@ function fetchRetry(input, init, option = { slowDown: 5e3, minSpeed: 5120, minDu
         else init.headers.push(["Range", Range]);
       } else if (init.headers) init.headers["Range"] = Range;
     }
+    init.signal = signal ? init.signal ? mergeSignal(init.signal, signal) : signal : init.signal;
     const response = await fetch(input, init);
     let stream = response.body;
     if (!stream) throw new Error("Error: Cannot find response body");
-    if (!response.headers.get("Content-Range") && start !== 0) {
+    if (response.status !== 206 && !response.headers.get("Content-Range") && start !== 0) {
       stream = stream.pipeThrough(sliceByteStream(start, end !== 0 ? end : void 0));
     }
     return stream;
