@@ -9,10 +9,10 @@
 
 <body>
     <script type="module">
-        import { retryableFetchStream, mergeStream } from "./index.js"
+        import { retryableFetchStream, mergeStream, sliceByteStream } from "./index.js"
 
         window.test = {
-            fetchRetry: async (url) => {
+            retryableFetchStream: async (url) => {
                 let receive = 0
                 const counter = new TransformStream({
                     transform(chunk, controller) {
@@ -57,6 +57,27 @@
                     }
                 })
                 mergeStream(4, gens).pipeTo(blackHole)
+            },
+            sliceByteStream: (total = 100, start = 42, end = 77) => {
+                const source = new ReadableStream({
+                    start() {
+                        this.index = 0
+                    },
+                    pull(controller) {
+                        const length = Math.min(Math.random() * 10, total - this.index)
+                        const arr = Array.from({length}, (_, i) => i + this.index)
+                        this.index += arr.length
+                        console.log("enqueue:", arr)
+                        controller.enqueue(arr)
+                        if (this.index >= total) controller.close();
+                    }
+                })
+                const logger = new WritableStream({
+                    write(chunk) {
+                        console.log("receive", chunk)
+                    }
+                })
+                source.pipeThrough(sliceByteStream(start, end)).pipeTo(logger)
             }
         }
     </script>
