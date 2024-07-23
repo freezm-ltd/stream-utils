@@ -8,6 +8,6 @@ export type RetryOption = {
     minDuration?: number;
     slowDown?: number;
 };
-export declare function streamRetry<T>(readableGenerator: StreamGenerator<ReadableStream<T>>, sensor: (chunk: T) => number, option: RetryOption): ReadableStream<T>;
+export declare function streamRetry<T>(readableGenerator: StreamGenerator<ReadableStream<T>>, sensor: (chunk: T) => number, option?: RetryOption): ReadableStream<T>;
 export declare function fetchRetry(input: RequestInfo | URL, init?: RequestInit, option?: RetryOption): ReadableStream<Uint8Array>;
 export { Flowmeter, SwitchableStream, fitStream, getFitter, byteFitter, sliceStream, sliceByteStream, mergeStream, };

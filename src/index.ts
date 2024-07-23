@@ -14,7 +14,11 @@ export type RetryOption = {
 // switch <- trigger <- under minSpeed until minDuration
 //    |                               |
 // source -> SwitchableStream -> Flowmeter -> sink
-export function streamRetry<T>(readableGenerator: StreamGenerator<ReadableStream<T>>, sensor: (chunk: T) => number, option: RetryOption) {
+export function streamRetry<T>(readableGenerator: StreamGenerator<ReadableStream<T>>, sensor: (chunk: T) => number, option?: RetryOption) {
+    let _option = { slowDown: 5000, minSpeed: 5120, minDuration: 10000 }
+    Object.assign(_option, option)
+    option = _option
+
     // add flowmeter
     const flowmeter = new Flowmeter(sensor)
     const { readable, writable } = flowmeter // sense flow
@@ -30,10 +34,6 @@ export function streamRetry<T>(readableGenerator: StreamGenerator<ReadableStream
 
 // retrying request
 export function fetchRetry(input: RequestInfo | URL, init?: RequestInit, option?: RetryOption) {
-    let _option = { slowDown: 5000, minSpeed: 5120, minDuration: 10000 }
-    Object.assign(_option, option)
-    option = _option
-
     let start = 0
     let end = 0
 

@@ -388,6 +388,9 @@ function mergeStream(generators, parallel = 1, signal, writableStrategy, readabl
 
 // src/index.ts
 function streamRetry(readableGenerator, sensor, option) {
+  let _option = { slowDown: 5e3, minSpeed: 5120, minDuration: 1e4 };
+  Object.assign(_option, option);
+  option = _option;
   const flowmeter = new Flowmeter(sensor);
   const { readable, writable } = flowmeter;
   const switchableStream = new SwitchableStream(readableGenerator, () => writable);
@@ -395,9 +398,6 @@ function streamRetry(readableGenerator, sensor, option) {
   return readable;
 }
 function fetchRetry(input, init, option) {
-  let _option = { slowDown: 5e3, minSpeed: 5120, minDuration: 1e4 };
-  Object.assign(_option, option);
-  option = _option;
   let start = 0;
   let end = 0;
   if (init && init.headers) {
