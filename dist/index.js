@@ -200,12 +200,10 @@ var Flowmeter = class extends EventTarget2 {
     this.buffer.push({ time, value });
   }
 };
-function lengthCounter(record, key) {
-  let total = record[key];
+function lengthCallback(callback, key = "length") {
   return new TransformStream({
     transform(chunk, controller) {
-      total += chunk.length;
-      record[key] = total;
+      callback(chunk[key]);
       controller.enqueue(chunk);
     }
   });
@@ -449,7 +447,9 @@ function retryableFetchStream(input, init, option) {
     if (response.status !== 206 && !response.headers.get("Content-Range") && start !== 0) {
       stream = stream.pipeThrough(sliceByteStream(start, end !== 0 ? end : void 0));
     }
-    stream = stream.pipeThrough(lengthCounter(context2, "start"));
+    stream = stream.pipeThrough(lengthCallback((delta) => {
+      context2.start += delta;
+    }));
     return stream;
   };
   return retryableStream(context, readableGenerator, option);
@@ -460,7 +460,7 @@ export {
   byteFitter,
   fitStream,
   getFitter,
-  lengthCounter,
+  lengthCallback,
   mergeStream,
   retryableFetchStream,
   retryableStream,

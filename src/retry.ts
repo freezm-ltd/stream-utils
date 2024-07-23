@@ -1,4 +1,4 @@
-import { lengthCounter, Flowmeter } from "./flow"
+import { lengthCallback, Flowmeter } from "./flow"
 import { StreamGenerator, StreamGeneratorContext, SwitchableStream } from "./repipe"
 import { mergeSignal } from "./utils"
 import { sliceByteStream } from "./slice"
@@ -75,7 +75,7 @@ export function retryableFetchStream(input: RequestInfo | URL, init?: RequestIni
             // slice stream
             stream = stream.pipeThrough(sliceByteStream(start, end !== 0 ? end : undefined))
         }
-        stream = stream.pipeThrough(lengthCounter(context, "start")) // count byte flow
+        stream = stream.pipeThrough(lengthCallback((delta) => { context.start += delta })) // count byte flow
         return stream
     }
 

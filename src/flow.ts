@@ -102,12 +102,10 @@ export class Flowmeter<T> extends EventTarget2 {
     }
 }
 
-export function lengthCounter(record: Record<any, any>, key: any) {
-    let total = record[key]
+export function lengthCallback(callback: (delta: number) => void, key = "length") {
     return new TransformStream({
         transform(chunk, controller) {
-            total += chunk.length
-            record[key] = total
+            callback(chunk[key])
             controller.enqueue(chunk)
         }
     })
