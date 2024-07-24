@@ -27,4 +27,5 @@ export declare class Flowmeter<T> extends EventTarget2 {
     protected watch(): void;
     protected process(chunk: T): void;
 }
+export declare function chunkCallback<T>(callback: (chunk: T) => void): TransformStream<T, T>;
 export declare function lengthCallback(callback: (delta: number) => void, key?: string): TransformStream<any, any>;

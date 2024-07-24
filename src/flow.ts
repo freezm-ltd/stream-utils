@@ -102,6 +102,15 @@ export class Flowmeter<T> extends EventTarget2 {
     }
 }
 
+export function chunkCallback<T>(callback: (chunk: T) => void) {
+    return new TransformStream<T, T>({
+        transform(chunk, controller) {
+            callback(chunk)
+            controller.enqueue(chunk)
+        }
+    })
+}
+
 export function lengthCallback(callback: (delta: number) => void, key = "length") {
     return new TransformStream({
         transform(chunk, controller) {

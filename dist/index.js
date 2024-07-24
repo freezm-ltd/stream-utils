@@ -200,6 +200,14 @@ var Flowmeter = class extends EventTarget2 {
     this.buffer.push({ time, value });
   }
 };
+function chunkCallback(callback) {
+  return new TransformStream({
+    transform(chunk, controller) {
+      callback(chunk);
+      controller.enqueue(chunk);
+    }
+  });
+}
 function lengthCallback(callback, key = "length") {
   return new TransformStream({
     transform(chunk, controller) {
@@ -458,6 +466,7 @@ export {
   Flowmeter,
   SwitchableStream,
   byteFitter,
+  chunkCallback,
   fitStream,
   getFitter,
   lengthCallback,
