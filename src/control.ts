@@ -1,10 +1,9 @@
 import { EventTarget2 } from "@freezm-ltd/event-target-2"
 import { PromiseLikeOrNot } from "./utils"
-import { chunkCallback } from "./flow"
 
 type Block<T> = { id: BlockId, chunk: T }
 type BlockId = number
-type ChunkGenerator<T> = () => PromiseLikeOrNot<{ value: T, done: boolean }>
+type ChunkGenerator<T> = () => PromiseLikeOrNot<ReadableStreamReadResult<T>>
 type ChunkConsumer<T> = (chunk: T) => PromiseLikeOrNot<void>
 
 function wrapQueuingStrategy<T>(strategy?: QueuingStrategy<T>) {
@@ -18,12 +17,19 @@ function wrapQueuingStrategy<T>(strategy?: QueuingStrategy<T>) {
     return undefined
 }
 
+function generatorify<T>(readable: ReadableStream<T>): ChunkGenerator<T> {
+    const reader = readable.getReader()
+    return reader.read
+}
+
 //      enqueue signal <------ signaler(ReadableStream) ------ consuming done signal
 //            |                                                            | 
 // ControlledReadableStream.readable -> piping & transfer -> ControlledWritableStream.writable (async-sink consume)
 export class ControlledReadableStream<T> {
     readonly readable: ReadableStream<Block<T>>
-    constructor(generator: ChunkGenerator<T>, signaler: ReadableStream<BlockId>, strategy?: QueuingStrategy<T>) {
+    constructor(generator: ReadableStream<T> | ChunkGenerator<T>, signaler: ReadableStream<BlockId>, strategy?: QueuingStrategy<T>) {
+        if (generator instanceof ReadableStream) generator = generatorify(generator);
+
         const signal = signaler.getReader()
         let consumedId = -1
 
