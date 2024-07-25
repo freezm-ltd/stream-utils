@@ -528,10 +528,10 @@ var ControlledWritableStream = class {
 };
 var ControlledStreamPair = class {
   constructor(generator, consumer, readableStrategy, writableStrategy) {
-    const _writable = new ControlledWritableStream(consumer, writableStrategy);
-    const _readable = new ControlledReadableStream(generator, _writable.signaler, readableStrategy);
-    this.writable = _writable.writable;
-    this.readable = _readable.readable;
+    const { writable, signaler } = new ControlledWritableStream(consumer, writableStrategy);
+    const { readable } = new ControlledReadableStream(generator, signaler, readableStrategy);
+    this.writable = writable;
+    this.readable = readable;
   }
 };
 export {
