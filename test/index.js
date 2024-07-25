@@ -218,83 +218,80 @@ function lengthCallback(callback, key = "length") {
 }
 
 // src/repipe.ts
-var SwitchableStream = class extends EventTarget2 {
+var AbstractSwitchableStream = class extends EventTarget2 {
   // to identify intended abort
-  constructor(readableGenerator, writableGenerator, readableContext = { signal: void 0 }, writableContext = { signal: void 0 }, readableStrategy, writableStrategy) {
+  constructor(generator, context = { signal: void 0 }, strategy) {
     super();
-    this.readableGenerator = readableGenerator;
-    this.writableGenerator = writableGenerator;
-    this.readableContext = readableContext;
-    this.writableContext = writableContext;
-    this.readableAbortContorller = new AbortController();
-    this.writableAbortController = new AbortController();
+    this.generator = generator;
+    this.context = context;
+    this.strategy = strategy;
+    this.controller = new AbortController();
     this.abortReason = "SwitchableStreamAbortForSwitching";
-    // switch repipe
-    //    |    |
-    // source -> this.writable -> this.readable -> sink
-    this.readableSwitching = false;
-    //                                      repipe switch
-    //                                          |   |
-    // source -> this.writable -> this.readable -> sink
-    this.writableSwitching = false;
-    const { readable, writable } = new TransformStream(void 0, writableStrategy, readableStrategy);
-    this.readable = readable;
-    this.writable = writable;
-    this.switchWritable().then(() => this.switchReadable());
+    this.isSwitching = false;
   }
-  async switchReadable(to) {
+  async switch(to) {
     let generator;
     if (!to) {
-      if (this.readableSwitching) return;
-      if (this.readableGenerator) generator = this.readableGenerator;
+      if (this.isSwitching) return;
+      if (this.generator) generator = this.generator;
       else return;
     }
-    return this.atomic("switch-readable", async () => {
-      this.readableSwitching = true;
-      this.readableAbortContorller.abort(this.abortReason);
-      this.readableAbortContorller = new AbortController();
-      this.readableContext.signal = this.readableAbortContorller.signal;
+    return this.atomic("switch", async () => {
+      this.isSwitching = true;
+      this.controller.abort(this.abortReason);
+      this.controller = new AbortController();
+      this.context.signal = this.controller.signal;
       while (!to) {
         try {
-          to = await generator(this.readableContext);
+          to = await generator(this.context);
         } catch (e) {
         }
       }
-      to.pipeTo(this.writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.readableContext.signal }).then(() => {
-        this.writable.close();
+      const { readable, writable } = this.target(to);
+      readable.pipeTo(writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.context.signal }).then(() => {
+        writable.close();
       }).catch((e) => {
-        if (e !== this.abortReason) this.switchReadable();
+        if (e !== this.abortReason) this.switch();
       });
-      this.readableSwitching = false;
-    });
-  }
-  async switchWritable(to) {
-    let generator;
-    if (!to) {
-      if (this.writableSwitching) return;
-      if (this.writableGenerator) generator = this.writableGenerator;
-      else return;
-    }
-    return this.atomic("switch-writable", async () => {
-      this.writableSwitching = true;
-      this.writableAbortController.abort(this.abortReason);
-      this.writableAbortController = new AbortController();
-      this.writableContext.signal = this.writableAbortController.signal;
-      while (!to) {
-        try {
-          to = await generator(this.writableContext);
-        } catch (e) {
-        }
-      }
-      this.readable.pipeTo(to, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.writableContext.signal }).then(() => to.close()).catch((e) => {
-        if (e !== this.abortReason) this.switchWritable();
-      });
-      this.writableSwitching = false;
+      this.isSwitching = false;
     });
   }
   abort() {
-    this.readableAbortContorller.abort(this.abortReason);
-    this.writableAbortController.abort(this.abortReason);
+    this.controller.abort(this.abortReason);
+  }
+};
+var SwitchableReadableStream = class extends AbstractSwitchableStream {
+  constructor(generator, context = { signal: void 0 }, strategy) {
+    super();
+    this.generator = generator;
+    this.context = context;
+    this.strategy = strategy;
+    const pipe = new TransformStream(void 0, void 0, strategy);
+    this.stream = pipe.readable;
+    this.writable = pipe.writable;
+  }
+  target(to) {
+    return {
+      readable: to,
+      writable: this.writable
+    };
+  }
+};
+var SwitchableWritableStream = class extends AbstractSwitchableStream {
+  constructor(generator, context = { signal: void 0 }, strategy) {
+    super();
+    this.generator = generator;
+    this.context = context;
+    this.strategy = strategy;
+    const pipe = new TransformStream(void 0, strategy);
+    this.stream = pipe.writable;
+    this.readable = pipe.readable;
+  }
+  target(to) {
+    return {
+      readable: this.readable,
+      writable: to
+    };
   }
 };
 
@@ -426,8 +423,9 @@ function retryableStream(context, readableGenerator, option, sensor) {
   if (!sensor) sensor = (any) => any.length;
   const flowmeter = new Flowmeter(sensor);
   const { readable, writable } = flowmeter;
-  const switchableStream = new SwitchableStream(readableGenerator, () => writable, context);
-  flowmeter.addTrigger((info) => option.minSpeed ? info.flow <= option.minSpeed : false, () => switchableStream.switchReadable(), option.minDuration, option.slowDown);
+  const switchable = new SwitchableReadableStream(readableGenerator, context);
+  switchable.stream.pipeTo(writable);
+  flowmeter.addTrigger((info) => option.minSpeed ? info.flow <= option.minSpeed : false, () => switchable.switch(), option.minDuration, option.slowDown);
   return readable;
 }
 function retryableFetchStream(input, init, option) {
@@ -484,8 +482,13 @@ function wrapQueuingStrategy(strategy) {
   }
   return void 0;
 }
+function generatorify(readable) {
+  const reader = readable.getReader();
+  return reader.read;
+}
 var ControlledReadableStream = class {
   constructor(generator, signaler, strategy) {
+    if (generator instanceof ReadableStream) generator = generatorify(generator);
     const signal = signaler.getReader();
     let consumedId = -1;
     let id = 0;
@@ -544,12 +547,43 @@ var ControlledStreamPair = class {
     this.readable = readable;
   }
 };
+
+// src/duplex.ts
+var Duplex = class {
+  constructor() {
+    const streamA = new TransformStream();
+    const streamB = new TransformStream();
+    this.endpoint1 = new DuplexEndpoint(streamA.readable, streamB.writable);
+    this.endpoint2 = new DuplexEndpoint(streamB.readable, streamA.writable);
+  }
+};
+var DuplexEndpoint = class _DuplexEndpoint {
+  constructor(readable, writable) {
+    this.readable = readable;
+    this.writable = writable;
+  }
+  // transfer duplex by postMessage
+  static transferify(endpoint) {
+    const { readable, writable } = endpoint;
+    return {
+      endpoint: { readable, writable },
+      transfer: [readable, writable]
+    };
+  }
+  // restore duplex from postMessage
+  static instancify(objectifiedEndpoint) {
+    return new _DuplexEndpoint(objectifiedEndpoint.readable, objectifiedEndpoint.writable);
+  }
+};
 export {
   ControlledReadableStream,
   ControlledStreamPair,
   ControlledWritableStream,
+  Duplex,
+  DuplexEndpoint,
   Flowmeter,
-  SwitchableStream,
+  SwitchableReadableStream,
+  SwitchableWritableStream,
   byteFitter,
   chunkCallback,
   fitStream,

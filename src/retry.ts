@@ -1,5 +1,5 @@
 import { lengthCallback, Flowmeter } from "./flow"
-import { StreamGenerator, StreamGeneratorContext, SwitchableStream } from "./repipe"
+import { StreamGenerator, StreamGeneratorContext, SwitchableReadableStream } from "./repipe"
 import { mergeSignal } from "./utils"
 import { sliceByteStream } from "./slice"
 
@@ -24,10 +24,11 @@ export function retryableStream<T>(context: StreamGeneratorContext, readableGene
     const { readable, writable } = flowmeter // sense flow
 
     // add switchablestream
-    const switchableStream = new SwitchableStream(readableGenerator, () => writable, context)
+    const switchable = new SwitchableReadableStream(readableGenerator, context)
+    switchable.stream.pipeTo(writable)
 
     // add trigger
-    flowmeter.addTrigger(info => option.minSpeed ? info.flow <= option.minSpeed : false, () => switchableStream.switchReadable(), option.minDuration, option.slowDown)
+    flowmeter.addTrigger(info => option.minSpeed ? info.flow <= option.minSpeed : false, () => switchable.switch(), option.minDuration, option.slowDown)
 
     return readable
 }

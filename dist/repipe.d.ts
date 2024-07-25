@@ -4,20 +4,43 @@ export type StreamGenerator<T = ReadableStream | WritableStream> = (context: Str
 export type StreamGeneratorContext = {
     signal?: AbortSignal;
 } & any;
-export declare class SwitchableStream extends EventTarget2 {
-    readonly readableGenerator?: StreamGenerator<ReadableStream> | undefined;
-    readonly writableGenerator?: StreamGenerator<WritableStream> | undefined;
-    readonly readableContext: StreamGeneratorContext;
-    readonly writableContext: StreamGeneratorContext;
-    protected readonly readable: ReadableStream;
-    protected readonly writable: WritableStream;
-    protected readableAbortContorller: AbortController;
-    protected writableAbortController: AbortController;
+export declare abstract class AbstractSwitchableStream<T> extends EventTarget2 {
+    readonly generator?: StreamGenerator | undefined;
+    readonly context: StreamGeneratorContext;
+    readonly strategy?: QueuingStrategy<T> | undefined;
+    abstract readonly stream: ReadableStream<T> | WritableStream<T>;
+    protected controller: AbortController;
     protected abortReason: string;
-    constructor(readableGenerator?: StreamGenerator<ReadableStream> | undefined, writableGenerator?: StreamGenerator<WritableStream> | undefined, readableContext?: StreamGeneratorContext, writableContext?: StreamGeneratorContext, readableStrategy?: QueuingStrategy, writableStrategy?: QueuingStrategy);
-    protected readableSwitching: boolean;
-    switchReadable(to?: ReadableStream): Promise<unknown>;
-    protected writableSwitching: boolean;
-    switchWritable(to?: WritableStream): Promise<unknown>;
+    constructor(generator?: StreamGenerator | undefined, context?: StreamGeneratorContext, strategy?: QueuingStrategy<T> | undefined);
+    protected isSwitching: boolean;
+    switch(to?: ReadableStream | WritableStream): Promise<unknown>;
+    abstract target(to: ReadableStream | WritableStream): {
+        readable: ReadableStream;
+        writable: WritableStream;
+    };
     abort(): void;
+}
+export declare class SwitchableReadableStream<T> extends AbstractSwitchableStream<T> {
+    readonly generator?: StreamGenerator<ReadableStream<T>> | undefined;
+    readonly context: StreamGeneratorContext;
+    readonly strategy?: QueuingStrategy<T> | undefined;
+    readonly stream: ReadableStream<T>;
+    protected readonly writable: WritableStream<T>;
+    constructor(generator?: StreamGenerator<ReadableStream<T>> | undefined, context?: StreamGeneratorContext, strategy?: QueuingStrategy<T> | undefined);
+    target(to: ReadableStream<T>): {
+        readable: ReadableStream<T>;
+        writable: WritableStream<T>;
+    };
+}
+export declare class SwitchableWritableStream<T> extends AbstractSwitchableStream<T> {
+    readonly generator?: StreamGenerator<ReadableStream<T>> | undefined;
+    readonly context: StreamGeneratorContext;
+    readonly strategy?: QueuingStrategy<T> | undefined;
+    readonly stream: WritableStream<T>;
+    protected readonly readable: ReadableStream<T>;
+    constructor(generator?: StreamGenerator<ReadableStream<T>> | undefined, context?: StreamGeneratorContext, strategy?: QueuingStrategy<T> | undefined);
+    target(to: WritableStream<T>): {
+        readable: ReadableStream<T>;
+        writable: WritableStream<T>;
+    };
 }

@@ -6,96 +6,100 @@ import { PromiseLikeOrNot } from "./utils"
 export type StreamGenerator<T = ReadableStream | WritableStream> = (context: StreamGeneratorContext) => PromiseLikeOrNot<T>
 export type StreamGeneratorContext = { signal?: AbortSignal } & any
 
-export class SwitchableStream extends EventTarget2 {
-    protected readonly readable: ReadableStream
-    protected readonly writable: WritableStream
-    protected readableAbortContorller = new AbortController()
-    protected writableAbortController = new AbortController()
+export abstract class AbstractSwitchableStream<T> extends EventTarget2 {
+    abstract readonly stream: ReadableStream<T> | WritableStream<T>
+    protected controller = new AbortController()
     protected abortReason = "SwitchableStreamAbortForSwitching" // to identify intended abort
-
+    
     constructor(
-        readonly readableGenerator?: StreamGenerator<ReadableStream>,
-        readonly writableGenerator?: StreamGenerator<WritableStream>,
-        readonly readableContext: StreamGeneratorContext = { signal: undefined },
-        readonly writableContext: StreamGeneratorContext = { signal: undefined },
-        readableStrategy?: QueuingStrategy,
-        writableStrategy?: QueuingStrategy,
+        readonly generator?: StreamGenerator,
+        readonly context: StreamGeneratorContext = { signal: undefined },
+        readonly strategy?: QueuingStrategy<T>
     ) {
         super()
-        const { readable, writable } = new TransformStream(undefined, writableStrategy, readableStrategy)
-        this.readable = readable
-        this.writable = writable
-        this.switchWritable().then(() => this.switchReadable())
     }
 
-    // switch repipe
-    //    |    |
-    // source -> this.writable -> this.readable -> sink
-    protected readableSwitching = false
-    async switchReadable(to?: ReadableStream) {
-        let generator: StreamGenerator<ReadableStream<any>>;
+    protected isSwitching = false
+    async switch(to?: ReadableStream | WritableStream) {
+        let generator: StreamGenerator
         if (!to) {
-            if (this.readableSwitching) return; // ignore standard switching if switching is already in progress
-            if (this.readableGenerator) generator = this.readableGenerator;
+            if (this.isSwitching) return; // ignore standard switching if switching is already in progress
+            if (this.generator) generator = this.generator
             else return; // switch target is null
         }
-        return this.atomic("switch-readable", async () => { // wait for previous switching ends
-            this.readableSwitching = true
-            this.readableAbortContorller.abort(this.abortReason) // abort previous piping
-            this.readableAbortContorller = new AbortController()
-            this.readableContext.signal = this.readableAbortContorller.signal
+        return this.atomic("switch", async () => {
+            this.isSwitching = true
+            this.controller.abort(this.abortReason) // abort previous piping
+            this.controller = new AbortController()
+            this.context.signal = this.controller.signal // update abort signal
             while (!to) {
                 try {
-                    to = await generator(this.readableContext); // get source
+                    to = await generator!(this.context); // get source
                 } catch (e) {
                     // slient catch, restart
                 }
             }
-            to.pipeTo(this.writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.readableContext.signal })
+            const { readable, writable } = this.target(to)
+            readable.pipeTo(writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.context.signal })
                 .then(() => {
-                    this.writable.close()
+                    writable.close()
                 })
                 .catch(e => {
-                    if (e !== this.abortReason) this.switchReadable() // automatic repipe except intended abort
+                    if (e !== this.abortReason) this.switch() // automatic repipe except intended abort
                 })
-            this.readableSwitching = false
+            this.isSwitching = false
         })
     }
 
-    //                                      repipe switch
-    //                                          |   |
-    // source -> this.writable -> this.readable -> sink
-    protected writableSwitching = false
-    async switchWritable(to?: WritableStream) {
-        let generator: StreamGenerator<WritableStream<any>>
-        if (!to) {
-            if (this.writableSwitching) return; // ignore standard switching if switching is already in progress
-            if (this.writableGenerator) generator = this.writableGenerator;
-            else return; // switch target is null
-        }
-        return this.atomic("switch-writable", async () => { // wait for previous switching ends
-            this.writableSwitching = true
-            this.writableAbortController.abort(this.abortReason) // abort previous piping
-            this.writableAbortController = new AbortController()
-            this.writableContext.signal = this.writableAbortController.signal
-            while (!to) {
-                try {
-                    to = await generator(this.writableContext); // get sink
-                } catch (e) {
-                    // slient catch, restart
-                }
-            }
-            this.readable.pipeTo(to, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.writableContext.signal })
-                .then(() => to!.close())
-                .catch(e => {
-                    if (e !== this.abortReason) this.switchWritable() // automatic repipe except intended abort
-                })
-            this.writableSwitching = false
-        })
-    }
+    abstract target(to: ReadableStream | WritableStream): { readable: ReadableStream, writable: WritableStream }
 
     abort() { // just abort and do not repipe
-        this.readableAbortContorller.abort(this.abortReason)
-        this.writableAbortController.abort(this.abortReason)
+        this.controller.abort(this.abortReason)
+    }
+}
+
+export class SwitchableReadableStream<T> extends AbstractSwitchableStream<T> {
+    readonly stream: ReadableStream<T>
+    protected readonly writable: WritableStream<T>
+
+    constructor(
+        readonly generator?: StreamGenerator<ReadableStream<T>>,
+        readonly context: StreamGeneratorContext = { signal: undefined },
+        readonly strategy?: QueuingStrategy<T>
+    ) {
+        super()
+        const pipe = new TransformStream(undefined, undefined, strategy)
+        this.stream = pipe.readable
+        this.writable = pipe.writable
+    }
+
+    target(to: ReadableStream<T>) {
+        return {
+            readable: to,
+            writable: this.writable,
+        }
+    }
+}
+
+export class SwitchableWritableStream<T> extends AbstractSwitchableStream<T> {
+    readonly stream: WritableStream<T>
+    protected readonly readable: ReadableStream<T>
+
+    constructor(
+        readonly generator?: StreamGenerator<ReadableStream<T>>,
+        readonly context: StreamGeneratorContext = { signal: undefined },
+        readonly strategy?: QueuingStrategy<T>
+    ) {
+        super()
+        const pipe = new TransformStream(undefined, strategy)
+        this.stream = pipe.writable
+        this.readable = pipe.readable
+    }
+
+    target(to: WritableStream<T>) {
+        return {
+            readable: this.readable,
+            writable: to,
+        }
     }
 }

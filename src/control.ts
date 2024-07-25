@@ -1,10 +1,31 @@
 import { EventTarget2 } from "@freezm-ltd/event-target-2"
 import { PromiseLikeOrNot } from "./utils"
+import { Duplex, DuplexEndpoint } from "./duplex"
 
 type Block<T> = { id: BlockId, chunk: T }
 type BlockId = number
 type ChunkGenerator<T> = () => PromiseLikeOrNot<ReadableStreamReadResult<T>>
 type ChunkConsumer<T> = (chunk: T) => PromiseLikeOrNot<void>
+
+/*                                               Block<T>
+            T                                     --->                                     T
+    source ---> ControlledReadableStream <endpoint>   <endpoint> ControlledWritableStream ---> sink (async consumed)
+       |                                          <---                                               |
+            <---       pull       <---           BlockId       <---          signal          <---
+*/
+
+
+export class ControlledReadableStream2<T> {
+    constructor(generator: ReadableStream<T> | ChunkGenerator<T>, endpoint: DuplexEndpoint<Block<T>, BlockId>, strategy?: QueuingStrategy<T>) {
+        
+    }
+}
+
+export class ControlledWritableStream2<T> {
+    constructor(consumer: ChunkConsumer<T>, endpoint: DuplexEndpoint<BlockId, Block<T>>, strategy?: QueuingStrategy<T>) {
+        
+    }
+}
 
 function wrapQueuingStrategy<T>(strategy?: QueuingStrategy<T>) {
     if (strategy) {
