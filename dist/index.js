@@ -475,8 +475,9 @@ function wrapQueuingStrategy(strategy) {
   return void 0;
 }
 var ControlledReadableStream = class extends ReadableStream {
-  constructor(generator, strategy) {
-    const signal = new EventTarget2();
+  constructor(generator, signaler, strategy) {
+    const signal = signaler.getReader();
+    let consumedId = -1;
     let id = 0;
     super({
       async pull(controller) {
@@ -485,39 +486,50 @@ var ControlledReadableStream = class extends ReadableStream {
           controller.close();
         } else {
           controller.enqueue({ id, chunk: value });
-          await signal.waitFor("next", id);
+          while (consumedId < id) {
+            const result = await signal.read();
+            if (result.done) return;
+            consumedId = result.value;
+          }
           id++;
         }
       }
     }, wrapQueuingStrategy(strategy));
-    this.signaler = new WritableStream({
-      write(chunk) {
-        signal.dispatch("next", chunk);
+  }
+};
+var ControlledWritableStream = class extends WritableStream {
+  constructor(consumer, strategy) {
+    const initEmitter = new EventTarget2();
+    let initFired = false;
+    let controller;
+    super({
+      async write(block) {
+        await consumer(block.chunk);
+        if (!initFired) await initEmitter.waitFor("start");
+        controller.enqueue(block.id);
+      },
+      async close() {
+        if (!initFired) await initEmitter.waitFor("start");
+        controller.close();
+      },
+      async abort(reason) {
+        if (!initFired) await initEmitter.waitFor("start");
+        controller.error(reason);
+      }
+    }, wrapQueuingStrategy(strategy));
+    this.signaler = new ReadableStream({
+      start(_controller) {
+        initFired = true;
+        initEmitter.dispatch("start");
+        controller = _controller;
       }
     });
   }
 };
-var ControlledWritableStream = class extends WritableStream {
-  constructor(consumer, signaler, strategy) {
-    const signal = signaler.getWriter();
-    super({
-      async write(block) {
-        await consumer(block.chunk);
-        await signal.write(block.id);
-      },
-      async close() {
-        await signal.close();
-      },
-      async abort() {
-        await signal.close();
-      }
-    }, wrapQueuingStrategy(strategy));
-  }
-};
 var ControlledStreamPair = class {
   constructor(generator, consumer, readableStrategy, writableStrategy) {
-    this.readable = new ControlledReadableStream(generator, readableStrategy);
-    this.writable = new ControlledWritableStream(consumer, this.readable.signaler, writableStrategy);
+    this.writable = new ControlledWritableStream(consumer, writableStrategy);
+    this.readable = new ControlledReadableStream(generator, this.writable.signaler, readableStrategy);
   }
 };
 export {

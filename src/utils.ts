@@ -9,6 +9,10 @@ export function mergeSignal(signal1: AbortSignal, signal2: AbortSignal) {
 	return controller.signal
 }
 
+export function blackhole() {
+	return new WritableStream()
+}
+
 export function noop(..._: any[]) {
 
 }
