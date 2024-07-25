@@ -1,4 +1,5 @@
 import { EventListener2, EventTarget2 } from "@freezm-ltd/event-target-2";
+import { PromiseLikeOrNot } from "./utils";
 export type FlowSensor<T> = (chunk: T) => number;
 export type FlowSensorValue = {
     time: number;
@@ -11,7 +12,7 @@ export type FlowInfo = {
     interval: number;
     flow: number;
 };
-export type FlowTrigger = (info: FlowInfo) => boolean | PromiseLike<boolean>;
+export type FlowTrigger = (info: FlowInfo) => PromiseLikeOrNot<boolean>;
 export declare class Flowmeter<T> extends EventTarget2 {
     readonly sensor: FlowSensor<T>;
     readonly interval: number;

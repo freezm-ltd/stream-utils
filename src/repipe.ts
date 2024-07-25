@@ -1,8 +1,9 @@
 // Bring back Readable/WritableStream and re-pipe each other, when they are broken or other event emitted
 
 import { EventTarget2 } from "@freezm-ltd/event-target-2"
+import { PromiseLikeOrNot } from "./utils"
 
-export type StreamGenerator<T = ReadableStream | WritableStream> = (context: StreamGeneratorContext) => T | PromiseLike<T>
+export type StreamGenerator<T = ReadableStream | WritableStream> = (context: StreamGeneratorContext) => PromiseLikeOrNot<T>
 export type StreamGeneratorContext = { signal?: AbortSignal } & any
 
 export class SwitchableStream extends EventTarget2 {

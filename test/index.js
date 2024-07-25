@@ -462,7 +462,68 @@ function retryableFetchStream(input, init, option) {
   };
   return retryableStream(context, readableGenerator, option);
 }
+
+// src/control.ts
+function wrapQueuingStrategy(strategy) {
+  if (strategy) {
+    const size = strategy.size;
+    return {
+      highWaterMark: strategy.highWaterMark,
+      size: size ? (block) => size(block.chunk) : void 0
+    };
+  }
+  return void 0;
+}
+var ControlledReadableStream = class extends ReadableStream {
+  constructor(generator, strategy) {
+    const signal = new EventTarget2();
+    let id = 0;
+    super({
+      async pull(controller) {
+        const { value, done } = await generator();
+        if (done) {
+          controller.close();
+        } else {
+          controller.enqueue({ id, chunk: value });
+          await signal.waitFor("next", id);
+          id++;
+        }
+      }
+    }, wrapQueuingStrategy(strategy));
+    this.signaler = new WritableStream({
+      write(chunk) {
+        signal.dispatch("next", chunk);
+      }
+    });
+  }
+};
+var ControlledWritableStream = class extends WritableStream {
+  constructor(consumer, signaler, strategy) {
+    const signal = signaler.getWriter();
+    super({
+      async write(block) {
+        await consumer(block.chunk);
+        await signal.write(block.id);
+      },
+      async close() {
+        await signal.close();
+      },
+      async abort() {
+        await signal.close();
+      }
+    }, wrapQueuingStrategy(strategy));
+  }
+};
+var ControlledStreamPair = class {
+  constructor(generator, consumer, readableStrategy, writableStrategy) {
+    this.readable = new ControlledReadableStream(generator, readableStrategy);
+    this.writable = new ControlledWritableStream(consumer, this.readable.signaler, writableStrategy);
+  }
+};
 export {
+  ControlledReadableStream,
+  ControlledStreamPair,
+  ControlledWritableStream,
   Flowmeter,
   SwitchableStream,
   byteFitter,

@@ -1,5 +1,6 @@
 import { EventTarget2 } from "@freezm-ltd/event-target-2";
-export type StreamGenerator<T = ReadableStream | WritableStream> = (context: StreamGeneratorContext) => T | PromiseLike<T>;
+import { PromiseLikeOrNot } from "./utils";
+export type StreamGenerator<T = ReadableStream | WritableStream> = (context: StreamGeneratorContext) => PromiseLikeOrNot<T>;
 export type StreamGeneratorContext = {
     signal?: AbortSignal;
 } & any;

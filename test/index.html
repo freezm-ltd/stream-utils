@@ -9,9 +9,33 @@
 
 <body>
     <script type="module">
-        import { retryableFetchStream, mergeStream, sliceByteStream } from "./index.js"
+        import { retryableFetchStream, mergeStream, sliceByteStream, ControlledStreamPair } from "./index.js"
+
+        function sleep(ms) {
+            return new Promise((resolve) => setTimeout(resolve, ms));
+        }
 
         window.test = {
+            controlledStream: () => {
+                let id = -1
+                const gen = async () => {
+                    const ms = 100 * Math.random()
+                    await sleep(ms)
+                    id++
+                    if (id < 100) {
+                        console.log(`send:${id}`, `sleeped:${ms}`)
+                        return { value: `recv:${id}`, done: false };
+                    }
+                    else return { value: null, done: true }
+                }
+                const con = async (data) => {
+                    const ms = 100 * Math.random()
+                    await sleep(ms)
+                    console.log(data, `sleeped:${ms}`)
+                }
+                const { readable, writable } = new ControlledStreamPair(gen, con)
+                readable.pipeTo(writable)
+            },
             retryableFetchStream: async (url) => {
                 let receive = 0
                 const counter = new TransformStream({
@@ -65,7 +89,7 @@
                     },
                     pull(controller) {
                         const length = Math.min(Math.random() * 10, total - this.index)
-                        const arr = Array.from({length}, (_, i) => i + this.index)
+                        const arr = Array.from({ length }, (_, i) => i + this.index)
                         this.index += arr.length
                         console.log("enqueue:", arr)
                         controller.enqueue(arr)

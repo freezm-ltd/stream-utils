@@ -4,6 +4,7 @@ import { fitStream, getFitter, byteFitter } from "./fit"
 import { sliceStream, sliceByteStream } from "./slice"
 import { mergeStream } from "./merge"
 import { retryableStream, retryableFetchStream } from "./retry"
+import { ControlledReadableStream, ControlledWritableStream, ControlledStreamPair } from "./control"
 
 export {
     Flowmeter, chunkCallback, lengthCallback,
@@ -12,4 +13,5 @@ export {
     sliceStream, sliceByteStream,
     mergeStream,
     retryableStream, retryableFetchStream,
+    ControlledReadableStream, ControlledWritableStream, ControlledStreamPair,
 }

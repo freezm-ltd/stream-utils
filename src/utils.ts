@@ -8,3 +8,9 @@ export function mergeSignal(signal1: AbortSignal, signal2: AbortSignal) {
 	signal2.onabort = (e) => controller.abort((e.target as AbortSignal).reason)
 	return controller.signal
 }
+
+export function noop(..._: any[]) {
+
+}
+
+export type PromiseLikeOrNot<T> = PromiseLike<T> | T
