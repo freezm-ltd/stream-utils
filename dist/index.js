@@ -474,12 +474,12 @@ function wrapQueuingStrategy(strategy) {
   }
   return void 0;
 }
-var ControlledReadableStream = class extends ReadableStream {
+var ControlledReadableStream = class {
   constructor(generator, signaler, strategy) {
     const signal = signaler.getReader();
     let consumedId = -1;
     let id = 0;
-    super({
+    this.readable = new ReadableStream({
       async pull(controller) {
         const { value, done } = await generator();
         if (done) {
@@ -497,12 +497,12 @@ var ControlledReadableStream = class extends ReadableStream {
     }, wrapQueuingStrategy(strategy));
   }
 };
-var ControlledWritableStream = class extends WritableStream {
+var ControlledWritableStream = class {
   constructor(consumer, strategy) {
     const initEmitter = new EventTarget2();
     let initFired = false;
     let controller;
-    super({
+    this.writable = new WritableStream({
       async write(block) {
         await consumer(block.chunk);
         if (!initFired) await initEmitter.waitFor("start");
@@ -528,8 +528,10 @@ var ControlledWritableStream = class extends WritableStream {
 };
 var ControlledStreamPair = class {
   constructor(generator, consumer, readableStrategy, writableStrategy) {
-    this.writable = new ControlledWritableStream(consumer, writableStrategy);
-    this.readable = new ControlledReadableStream(generator, this.writable.signaler, readableStrategy);
+    const _writable = new ControlledWritableStream(consumer, writableStrategy);
+    const _readable = new ControlledReadableStream(generator, _writable.signaler, readableStrategy);
+    this.writable = _writable.writable;
+    this.readable = _readable.readable;
   }
 };
 export {

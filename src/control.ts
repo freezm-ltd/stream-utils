@@ -18,16 +18,17 @@ function wrapQueuingStrategy<T>(strategy?: QueuingStrategy<T>) {
     return undefined
 }
 
-//      enqueue signal <----- (signaler) ----- consuming done signal
-//            |                                           | 
-// ControlledReadableStream -> ... pipings ... -> ControlledWritableStream (async-sink consume)
-export class ControlledReadableStream<T> extends ReadableStream<Block<T>> {
+//      enqueue signal <------ signaler(ReadableStream) ------ consuming done signal
+//            |                                                            | 
+// ControlledReadableStream.readable -> piping & transfer -> ControlledWritableStream.writable (async-sink consume)
+export class ControlledReadableStream<T> {
+    readonly readable: ReadableStream<Block<T>>
     constructor(generator: ChunkGenerator<T>, signaler: ReadableStream<BlockId>, strategy?: QueuingStrategy<T>) {
         const signal = signaler.getReader()
         let consumedId = -1
 
         let id = 0
-        super({
+        this.readable = new ReadableStream({
             async pull(controller) {
                 const { value, done } = await generator()
                 if (done) {
@@ -46,14 +47,15 @@ export class ControlledReadableStream<T> extends ReadableStream<Block<T>> {
     }
 }
 
-export class ControlledWritableStream<T> extends WritableStream<Block<T>> {
+export class ControlledWritableStream<T> {
+    readonly writable: WritableStream<Block<T>>
     readonly signaler: ReadableStream<BlockId>
     constructor(consumer: ChunkConsumer<T>, strategy?: QueuingStrategy<T>) {
         const initEmitter = new EventTarget2()
         let initFired = false
         let controller: ReadableStreamDefaultController<number>
 
-        super({
+        this.writable = new WritableStream({
             async write(block) {
                 await consumer(block.chunk)
                 if (!initFired) await initEmitter.waitFor("start");
@@ -80,10 +82,12 @@ export class ControlledWritableStream<T> extends WritableStream<Block<T>> {
 }
 
 export class ControlledStreamPair<T> {
-    readonly readable: ControlledReadableStream<T>
-    readonly writable: ControlledWritableStream<T>
+    readonly readable: ReadableStream<Block<T>>
+    readonly writable: WritableStream<Block<T>>
     constructor(generator: ChunkGenerator<T>, consumer: ChunkConsumer<T>, readableStrategy?: QueuingStrategy<T>, writableStrategy?: QueuingStrategy<T>) {
-        this.writable = new ControlledWritableStream(consumer, writableStrategy)
-        this.readable = new ControlledReadableStream(generator, this.writable.signaler, readableStrategy)
+        const _writable = new ControlledWritableStream(consumer, writableStrategy)
+        const _readable = new ControlledReadableStream(generator, _writable.signaler, readableStrategy)
+        this.writable = _writable.writable
+        this.readable = _readable.readable
     }
 }

@@ -9,16 +9,18 @@ type ChunkGenerator<T> = () => PromiseLikeOrNot<{
     done: boolean;
 }>;
 type ChunkConsumer<T> = (chunk: T) => PromiseLikeOrNot<void>;
-export declare class ControlledReadableStream<T> extends ReadableStream<Block<T>> {
+export declare class ControlledReadableStream<T> {
+    readonly readable: ReadableStream<Block<T>>;
     constructor(generator: ChunkGenerator<T>, signaler: ReadableStream<BlockId>, strategy?: QueuingStrategy<T>);
 }
-export declare class ControlledWritableStream<T> extends WritableStream<Block<T>> {
+export declare class ControlledWritableStream<T> {
+    readonly writable: WritableStream<Block<T>>;
     readonly signaler: ReadableStream<BlockId>;
     constructor(consumer: ChunkConsumer<T>, strategy?: QueuingStrategy<T>);
 }
 export declare class ControlledStreamPair<T> {
-    readonly readable: ControlledReadableStream<T>;
-    readonly writable: ControlledWritableStream<T>;
+    readonly readable: ReadableStream<Block<T>>;
+    readonly writable: WritableStream<Block<T>>;
     constructor(generator: ChunkGenerator<T>, consumer: ChunkConsumer<T>, readableStrategy?: QueuingStrategy<T>, writableStrategy?: QueuingStrategy<T>);
 }
 export {};
