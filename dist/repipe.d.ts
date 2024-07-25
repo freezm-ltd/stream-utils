@@ -5,8 +5,8 @@ export type StreamGeneratorContext = {
     signal?: AbortSignal;
 } & any;
 export declare class SwitchableStream extends EventTarget2 {
-    readonly readableGenerator: StreamGenerator<ReadableStream>;
-    readonly writableGenerator: StreamGenerator<WritableStream>;
+    readonly readableGenerator?: StreamGenerator<ReadableStream> | undefined;
+    readonly writableGenerator?: StreamGenerator<WritableStream> | undefined;
     readonly readableContext: StreamGeneratorContext;
     readonly writableContext: StreamGeneratorContext;
     protected readonly readable: ReadableStream;
@@ -14,7 +14,7 @@ export declare class SwitchableStream extends EventTarget2 {
     protected readableAbortContorller: AbortController;
     protected writableAbortController: AbortController;
     protected abortReason: string;
-    constructor(readableGenerator: StreamGenerator<ReadableStream>, writableGenerator: StreamGenerator<WritableStream>, readableContext?: StreamGeneratorContext, writableContext?: StreamGeneratorContext, readableStrategy?: QueuingStrategy, writableStrategy?: QueuingStrategy);
+    constructor(readableGenerator?: StreamGenerator<ReadableStream> | undefined, writableGenerator?: StreamGenerator<WritableStream> | undefined, readableContext?: StreamGeneratorContext, writableContext?: StreamGeneratorContext, readableStrategy?: QueuingStrategy, writableStrategy?: QueuingStrategy);
     protected readableSwitching: boolean;
     switchReadable(to?: ReadableStream): Promise<unknown>;
     protected writableSwitching: boolean;

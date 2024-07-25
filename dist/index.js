@@ -243,7 +243,12 @@ var SwitchableStream = class extends EventTarget2 {
     this.switchWritable().then(() => this.switchReadable());
   }
   async switchReadable(to) {
-    if (!to && this.readableSwitching) return;
+    let generator;
+    if (!to) {
+      if (this.readableSwitching) return;
+      if (this.readableGenerator) generator = this.readableGenerator;
+      else return;
+    }
     return this.atomic("switch-readable", async () => {
       this.readableSwitching = true;
       this.readableAbortContorller.abort(this.abortReason);
@@ -251,7 +256,7 @@ var SwitchableStream = class extends EventTarget2 {
       this.readableContext.signal = this.readableAbortContorller.signal;
       while (!to) {
         try {
-          to = await this.readableGenerator(this.readableContext);
+          to = await generator(this.readableContext);
         } catch (e) {
         }
       }
@@ -264,7 +269,12 @@ var SwitchableStream = class extends EventTarget2 {
     });
   }
   async switchWritable(to) {
-    if (!to && this.writableSwitching) return;
+    let generator;
+    if (!to) {
+      if (this.writableSwitching) return;
+      if (this.writableGenerator) generator = this.writableGenerator;
+      else return;
+    }
     return this.atomic("switch-writable", async () => {
       this.writableSwitching = true;
       this.writableAbortController.abort(this.abortReason);
@@ -272,7 +282,7 @@ var SwitchableStream = class extends EventTarget2 {
       this.writableContext.signal = this.writableAbortController.signal;
       while (!to) {
         try {
-          to = await this.writableGenerator(this.writableContext);
+          to = await generator(this.writableContext);
         } catch (e) {
         }
       }

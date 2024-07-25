@@ -14,8 +14,8 @@ export class SwitchableStream extends EventTarget2 {
     protected abortReason = "SwitchableStreamAbortForSwitching" // to identify intended abort
 
     constructor(
-        readonly readableGenerator: StreamGenerator<ReadableStream>,
-        readonly writableGenerator: StreamGenerator<WritableStream>,
+        readonly readableGenerator?: StreamGenerator<ReadableStream>,
+        readonly writableGenerator?: StreamGenerator<WritableStream>,
         readonly readableContext: StreamGeneratorContext = { signal: undefined },
         readonly writableContext: StreamGeneratorContext = { signal: undefined },
         readableStrategy?: QueuingStrategy,
@@ -33,7 +33,12 @@ export class SwitchableStream extends EventTarget2 {
     // source -> this.writable -> this.readable -> sink
     protected readableSwitching = false
     async switchReadable(to?: ReadableStream) {
-        if (!to && this.readableSwitching) return; // ignore standard switching if switching is already in progress
+        let generator: StreamGenerator<ReadableStream<any>>;
+        if (!to) {
+            if (this.readableSwitching) return; // ignore standard switching if switching is already in progress
+            if (this.readableGenerator) generator = this.readableGenerator;
+            else return; // switch target is null
+        }
         return this.atomic("switch-readable", async () => { // wait for previous switching ends
             this.readableSwitching = true
             this.readableAbortContorller.abort(this.abortReason) // abort previous piping
@@ -41,7 +46,7 @@ export class SwitchableStream extends EventTarget2 {
             this.readableContext.signal = this.readableAbortContorller.signal
             while (!to) {
                 try {
-                    to = await this.readableGenerator(this.readableContext); // get source
+                    to = await generator(this.readableContext); // get source
                 } catch (e) {
                     // slient catch, restart
                 }
@@ -62,7 +67,12 @@ export class SwitchableStream extends EventTarget2 {
     // source -> this.writable -> this.readable -> sink
     protected writableSwitching = false
     async switchWritable(to?: WritableStream) {
-        if (!to && this.writableSwitching) return; // ignore standard switching if switching is already in progress
+        let generator: StreamGenerator<WritableStream<any>>
+        if (!to) {
+            if (this.writableSwitching) return; // ignore standard switching if switching is already in progress
+            if (this.writableGenerator) generator = this.writableGenerator;
+            else return; // switch target is null
+        }
         return this.atomic("switch-writable", async () => { // wait for previous switching ends
             this.writableSwitching = true
             this.writableAbortController.abort(this.abortReason) // abort previous piping
@@ -70,7 +80,7 @@ export class SwitchableStream extends EventTarget2 {
             this.writableContext.signal = this.writableAbortController.signal
             while (!to) {
                 try {
-                    to = await this.writableGenerator(this.writableContext); // get sink
+                    to = await generator(this.writableContext); // get sink
                 } catch (e) {
                     // slient catch, restart
                 }
