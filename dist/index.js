@@ -1,4 +1,4 @@
-// node_modules/.pnpm/@freezm-ltd+event-target-2@https+++codeload.github.com+freezm-ltd+EventTarget2+tar.gz+ab35de5_waf2g56p5kfzme2plmhrbk5cai/node_modules/@freezm-ltd/event-target-2/dist/index.js
+// node_modules/.pnpm/@freezm-ltd+event-target-2@https+++codeload.github.com+freezm-ltd+EventTarget2+tar.gz+11ff208_3njyjyppej5icdv7ro2urw6f3a/node_modules/@freezm-ltd/event-target-2/dist/index.js
 var EventTarget2 = class extends EventTarget {
   constructor() {
     super(...arguments);
@@ -9,14 +9,14 @@ var EventTarget2 = class extends EventTarget {
   async waitFor(type, compareValue) {
     return new Promise((resolve) => {
       if (compareValue !== void 0) {
-        this.listenOnceOnly(type, resolve, (e) => e.detail === compareValue);
+        this.listenOnceOnly(type, (e) => resolve(e.detail), (e) => e.detail === compareValue);
       } else {
-        this.listenOnce(type, resolve);
+        this.listenOnce(type, (e) => resolve(e.detail));
       }
     });
   }
   callback(type, callback) {
-    this.waitFor(type).then((result) => callback(result));
+    this.waitFor(type).then(callback);
   }
   dispatch(type, detail) {
     this.dispatchEvent(new CustomEvent(type, detail !== void 0 ? { detail } : void 0));
@@ -511,9 +511,27 @@ var DuplexEndpoint = class _DuplexEndpoint {
   }
 };
 var SwitchableDuplexEndpoint = class extends DuplexEndpoint {
-  constructor() {
-    const switchableReadable = new SwitchableReadableStream();
-    const switchableWritable = new SwitchableWritableStream();
+  constructor(generator) {
+    const switchEmitter = new EventTarget2();
+    if (generator) {
+      let readableRequired = false;
+      let writableRequired = false;
+      switchEmitter.listen("require", async (e) => {
+        if (e.detail === "readable") readableRequired = true;
+        if (e.detail === "writable") writableRequired = true;
+        if (readableRequired && writableRequired && generator) {
+          readableRequired = false;
+          writableRequired = false;
+          switchEmitter.dispatch("generate", await generator());
+        }
+      });
+    }
+    const switchableReadable = new SwitchableReadableStream(generator ? async () => {
+      return (await switchEmitter.waitFor("generate")).readable;
+    } : void 0);
+    const switchableWritable = new SwitchableWritableStream(generator ? async () => {
+      return (await switchEmitter.waitFor("generate")).writable;
+    } : void 0);
     super(switchableReadable.stream, switchableWritable.stream);
     this.switchableReadable = new SwitchableReadableStream();
     this.switchableWritable = new SwitchableWritableStream();

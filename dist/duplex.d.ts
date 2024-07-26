@@ -1,4 +1,5 @@
 import { SwitchableReadableStream, SwitchableWritableStream } from "./repipe";
+import { PromiseLikeOrNot } from "./utils";
 export declare class Duplex<A = any, B = any> {
     readonly endpoint1: DuplexEndpoint<A, B>;
     readonly endpoint2: DuplexEndpoint<B, A>;
@@ -22,6 +23,6 @@ export declare class DuplexEndpoint<A = any, B = any> {
 export declare class SwitchableDuplexEndpoint<A = any, B = any> extends DuplexEndpoint<A, B> {
     readonly switchableReadable: SwitchableReadableStream<A>;
     readonly switchableWritable: SwitchableWritableStream<B>;
-    constructor();
+    constructor(generator?: () => PromiseLikeOrNot<DuplexEndpoint<A, B>>);
     switch(endpoint: DuplexEndpoint<A, B>): Promise<void>;
 }

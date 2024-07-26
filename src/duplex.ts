@@ -1,7 +1,9 @@
 // endpoint1      endpoint2
 // A.writable -> A.readable
 
+import { EventTarget2 } from "@freezm-ltd/event-target-2"
 import { SwitchableReadableStream, SwitchableWritableStream } from "./repipe"
+import { PromiseLikeOrNot } from "./utils"
 
 // B.readable <- B.writable
 export class Duplex<A = any, B = any> {
@@ -49,9 +51,27 @@ export class SwitchableDuplexEndpoint<A = any, B = any> extends DuplexEndpoint<A
     readonly switchableReadable = new SwitchableReadableStream<A>()
     readonly switchableWritable = new SwitchableWritableStream<B>()
 
-    constructor() {
-        const switchableReadable = new SwitchableReadableStream<A>()
-        const switchableWritable = new SwitchableWritableStream<B>()
+    constructor(generator?: () => PromiseLikeOrNot<DuplexEndpoint<A, B>>) {
+        const switchEmitter = new EventTarget2()
+        if (generator) { // automatic switching
+            let readableRequired = false
+            let writableRequired = false
+            switchEmitter.listen<"readable" | "writable", void>("require", async (e) => {
+                if (e.detail === "readable") readableRequired = true;
+                if (e.detail === "writable") writableRequired = true;
+                if (readableRequired && writableRequired && generator) {
+                    readableRequired = false
+                    writableRequired = false
+                    switchEmitter.dispatch("generate", await generator())
+                }
+            })
+        }
+        const switchableReadable = new SwitchableReadableStream<A>(generator ? async () => {
+            return (await switchEmitter.waitFor<DuplexEndpoint<A, B>>("generate")).readable
+        } : undefined)
+        const switchableWritable = new SwitchableWritableStream<B>(generator ? async () => {
+            return (await switchEmitter.waitFor<DuplexEndpoint<A, B>>("generate")).writable
+        } : undefined)
         super(switchableReadable.stream, switchableWritable.stream)
         this.switchableReadable = switchableReadable
         this.switchableWritable = switchableWritable
