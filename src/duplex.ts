@@ -51,7 +51,7 @@ export class SwitchableDuplexEndpoint<A = any, B = any> extends DuplexEndpoint<A
     readonly switchableReadable = new SwitchableReadableStream<A>()
     readonly switchableWritable = new SwitchableWritableStream<B>()
 
-    constructor(generator?: (context?: any) => PromiseLikeOrNot<DuplexEndpoint<A, B>>, context?: any) {
+    constructor(generator?: (context: any) => PromiseLikeOrNot<DuplexEndpoint<A, B>>, context: any = {}) {
         const switchEmitter = new EventTarget2()
         if (generator) { // automatic switching
             let readableRequired = false, writableRequired = false;

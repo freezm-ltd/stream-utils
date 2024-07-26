@@ -511,7 +511,7 @@ var DuplexEndpoint = class _DuplexEndpoint {
   }
 };
 var SwitchableDuplexEndpoint = class extends DuplexEndpoint {
-  constructor(generator, context) {
+  constructor(generator, context = {}) {
     const switchEmitter = new EventTarget2();
     if (generator) {
       let readableRequired = false, writableRequired = false;

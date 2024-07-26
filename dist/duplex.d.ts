@@ -23,6 +23,6 @@ export declare class DuplexEndpoint<A = any, B = any> {
 export declare class SwitchableDuplexEndpoint<A = any, B = any> extends DuplexEndpoint<A, B> {
     readonly switchableReadable: SwitchableReadableStream<A>;
     readonly switchableWritable: SwitchableWritableStream<B>;
-    constructor(generator?: (context?: any) => PromiseLikeOrNot<DuplexEndpoint<A, B>>, context?: any);
+    constructor(generator?: (context: any) => PromiseLikeOrNot<DuplexEndpoint<A, B>>, context?: any);
     switch(endpoint: DuplexEndpoint<A, B>): Promise<void>;
 }
