@@ -7,12 +7,14 @@ type Block<T> = {
 type BlockId = number;
 type ChunkGenerator<T> = () => PromiseLikeOrNot<ReadableStreamReadResult<T>>;
 type ChunkConsumer<T> = (chunk: T) => PromiseLikeOrNot<void>;
+export type ControlledReadableEndpoint<T> = SwitchableDuplexEndpoint<BlockId, Block<T>>;
+export type ControlledWritableEndpoint<T> = SwitchableDuplexEndpoint<Block<T>, BlockId>;
 export declare class ControlledReadableStream<T> {
-    readonly endpoint: SwitchableDuplexEndpoint<BlockId, Block<T>>;
+    readonly endpoint: ControlledReadableEndpoint<T>;
     constructor(generator: ReadableStream<T> | ChunkGenerator<T>, strategy?: QueuingStrategy<T>);
 }
 export declare class ControlledWritableStream<T> {
-    readonly endpoint: SwitchableDuplexEndpoint<Block<T>, BlockId>;
+    readonly endpoint: ControlledWritableEndpoint<T>;
     constructor(consumer: ChunkConsumer<T>, strategy?: QueuingStrategy<T>);
 }
 export declare class ControlledStreamPair<T> {
