@@ -2,8 +2,8 @@ import { EventTarget2 } from "@freezm-ltd/event-target-2"
 import { PromiseLikeOrNot } from "./utils"
 import { SwitchableDuplexEndpoint } from "./duplex"
 
-type Block<T> = { id: BlockId, chunk: T }
-type BlockId = number
+export type Block<T> = { id: BlockId, chunk: T }
+export type BlockId = number
 type ChunkGenerator<T> = () => PromiseLikeOrNot<ReadableStreamReadResult<T>>
 type ChunkConsumer<T> = (chunk: T) => PromiseLikeOrNot<void>
 export type ControlledReadableEndpoint<T> = SwitchableDuplexEndpoint<BlockId, Block<T>>

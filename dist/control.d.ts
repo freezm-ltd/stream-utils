@@ -1,10 +1,10 @@
 import { PromiseLikeOrNot } from "./utils";
 import { SwitchableDuplexEndpoint } from "./duplex";
-type Block<T> = {
+export type Block<T> = {
     id: BlockId;
     chunk: T;
 };
-type BlockId = number;
+export type BlockId = number;
 type ChunkGenerator<T> = () => PromiseLikeOrNot<ReadableStreamReadResult<T>>;
 type ChunkConsumer<T> = (chunk: T) => PromiseLikeOrNot<void>;
 export type ControlledReadableEndpoint<T> = SwitchableDuplexEndpoint<BlockId, Block<T>>;
