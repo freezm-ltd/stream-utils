@@ -520,9 +520,11 @@ var SwitchableDuplexEndpoint = class extends DuplexEndpoint {
     this.switchableReadable = switchableReadable;
     this.switchableWritable = switchableWritable;
   }
-  switch(endpoint) {
-    this.switchableReadable.switch(endpoint.readable);
-    this.switchableWritable.switch(endpoint.writable);
+  async switch(endpoint) {
+    await Promise.all([
+      this.switchableReadable.switch(endpoint.readable),
+      this.switchableWritable.switch(endpoint.writable)
+    ]);
   }
 };
 

@@ -56,9 +56,11 @@ export class SwitchableDuplexEndpoint<A = any, B = any> extends DuplexEndpoint<A
         this.switchableReadable = switchableReadable
         this.switchableWritable = switchableWritable
     }
-    
-    switch(endpoint: DuplexEndpoint<A, B>) {
-        this.switchableReadable.switch(endpoint.readable)
-        this.switchableWritable.switch(endpoint.writable)
+
+    async switch(endpoint: DuplexEndpoint<A, B>) {
+        await Promise.all([
+            this.switchableReadable.switch(endpoint.readable),
+            this.switchableWritable.switch(endpoint.writable)
+        ])
     }
 }

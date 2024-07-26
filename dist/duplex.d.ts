@@ -23,5 +23,5 @@ export declare class SwitchableDuplexEndpoint<A = any, B = any> extends DuplexEn
     readonly switchableReadable: SwitchableReadableStream<A>;
     readonly switchableWritable: SwitchableWritableStream<B>;
     constructor();
-    switch(endpoint: DuplexEndpoint<A, B>): void;
+    switch(endpoint: DuplexEndpoint<A, B>): Promise<void>;
 }
