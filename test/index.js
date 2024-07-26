@@ -613,6 +613,7 @@ export {
   Duplex,
   DuplexEndpoint,
   Flowmeter,
+  SwitchableDuplexEndpoint,
   SwitchableReadableStream,
   SwitchableWritableStream,
   byteFitter,

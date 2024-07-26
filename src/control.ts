@@ -1,7 +1,6 @@
 import { EventTarget2 } from "@freezm-ltd/event-target-2"
 import { PromiseLikeOrNot } from "./utils"
-import { Duplex, DuplexEndpoint, SwitchableDuplexEndpoint } from "./duplex"
-import { SwitchableWritableStream } from "./repipe"
+import { SwitchableDuplexEndpoint } from "./duplex"
 
 type Block<T> = { id: BlockId, chunk: T }
 type BlockId = number
