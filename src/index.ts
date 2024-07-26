@@ -5,7 +5,7 @@ import { sliceStream, sliceByteStream } from "./slice"
 import { mergeStream } from "./merge"
 import { retryableStream, retryableFetchStream } from "./retry"
 import { ControlledReadableStream, ControlledWritableStream, ControlledStreamPair, ControlledReadableEndpoint, ControlledWritableEndpoint } from "./control"
-import { Duplex, DuplexEndpoint } from "./duplex"
+import { Duplex, DuplexEndpoint, ObjectifiedDuplexEndpoint, TransferableDuplexEndpoint } from "./duplex"
 
 export {
     Flowmeter, chunkCallback, lengthCallback,
@@ -15,5 +15,5 @@ export {
     mergeStream,
     retryableStream, retryableFetchStream,
     ControlledReadableStream, ControlledWritableStream, ControlledStreamPair, ControlledReadableEndpoint, ControlledWritableEndpoint,
-    Duplex, DuplexEndpoint,
+    Duplex, DuplexEndpoint, ObjectifiedDuplexEndpoint, TransferableDuplexEndpoint
 }

@@ -4,11 +4,11 @@ export declare class Duplex<A, B> {
     readonly endpoint2: DuplexEndpoint<B, A>;
     constructor();
 }
-type ObjectifiedDuplexEndpoint<A, B> = {
+export type ObjectifiedDuplexEndpoint<A, B> = {
     readable: ReadableStream<A>;
     writable: WritableStream<B>;
 };
-type TransferableDuplexEndpoint<A, B> = {
+export type TransferableDuplexEndpoint<A, B> = {
     endpoint: ObjectifiedDuplexEndpoint<A, B>;
     transfer: [ReadableStream<A>, WritableStream<B>];
 };
@@ -25,4 +25,3 @@ export declare class SwitchableDuplexEndpoint<A, B> extends DuplexEndpoint<A, B>
     constructor();
     switch(endpoint: DuplexEndpoint<A, B>): void;
 }
-export {};

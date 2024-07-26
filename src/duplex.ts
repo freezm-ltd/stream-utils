@@ -16,8 +16,8 @@ export class Duplex<A, B> {
     }
 }
 
-type ObjectifiedDuplexEndpoint<A, B> = { readable: ReadableStream<A>, writable: WritableStream<B> }
-type TransferableDuplexEndpoint<A, B> = {
+export type ObjectifiedDuplexEndpoint<A, B> = { readable: ReadableStream<A>, writable: WritableStream<B> }
+export type TransferableDuplexEndpoint<A, B> = {
     endpoint: ObjectifiedDuplexEndpoint<A, B>,
     transfer: [ReadableStream<A>, WritableStream<B>]
 }
