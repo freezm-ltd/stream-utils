@@ -532,12 +532,16 @@ var SwitchableDuplexEndpoint = class extends DuplexEndpoint {
       return (await switchEmitter.waitFor("generate")).writable;
     } : void 0);
     super(switchableReadable.stream, switchableWritable.stream);
+    this.generator = generator;
+    this.context = context;
     this.switchableReadable = new SwitchableReadableStream();
     this.switchableWritable = new SwitchableWritableStream();
     this.switchableReadable = switchableReadable;
     this.switchableWritable = switchableWritable;
   }
   async switch(endpoint) {
+    if (this.generator) endpoint = await this.generator(this.context);
+    if (!endpoint) return;
     await Promise.all([
       this.switchableReadable.switch(endpoint.readable),
       this.switchableWritable.switch(endpoint.writable)
@@ -547,9 +551,9 @@ var SwitchableDuplexEndpoint = class extends DuplexEndpoint {
 
 // src/control.ts
 var ControlledReadableStream = class {
-  constructor(generator, endpoint = new SwitchableDuplexEndpoint(), strategy) {
+  constructor(generator, endpoint, strategy) {
     if (generator instanceof ReadableStream) generator = generatorify(generator);
-    this.endpoint = endpoint;
+    this.endpoint = endpoint ? endpoint : new SwitchableDuplexEndpoint();
     const signal = this.endpoint.readable.getReader();
     let enqueued = 0;
     let consumed = -1;
@@ -571,11 +575,12 @@ var ControlledReadableStream = class {
       }
     }, wrapQueuingStrategy(strategy));
     stream.pipeTo(this.endpoint.writable);
+    if (endpoint) this.endpoint.switch();
   }
 };
 var ControlledWritableStream = class {
-  constructor(consumer, endpoint = new SwitchableDuplexEndpoint(), strategy) {
-    this.endpoint = endpoint;
+  constructor(consumer, endpoint, strategy) {
+    this.endpoint = endpoint ? endpoint : new SwitchableDuplexEndpoint();
     const signal = this.endpoint.writable.getWriter();
     let consumed = -1;
     let interval;
@@ -603,6 +608,7 @@ var ControlledWritableStream = class {
       }
     }, wrapQueuingStrategy(strategy));
     this.endpoint.readable.pipeTo(stream);
+    if (endpoint) this.endpoint.switch();
   }
 };
 var ControlledStreamPair = class {

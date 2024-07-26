@@ -21,11 +21,11 @@ export type ObjectifiedControlledWritableEndpoint<T> = ObjectifiedDuplexEndpoint
 
 export class ControlledReadableStream<T> {
     readonly endpoint: ControlledReadableEndpoint<T>
-    constructor(generator: ReadableStream<T> | ChunkGenerator<T>, endpoint: ControlledReadableEndpoint<T> = new SwitchableDuplexEndpoint(), strategy?: QueuingStrategy<T>) {
+    constructor(generator: ReadableStream<T> | ChunkGenerator<T>, endpoint?: ControlledReadableEndpoint<T>, strategy?: QueuingStrategy<T>) {
         if (generator instanceof ReadableStream) generator = generatorify(generator);
 
         // setup endpoint(switchable)
-        this.endpoint = endpoint
+        this.endpoint = endpoint ? endpoint : new SwitchableDuplexEndpoint()
         const signal = this.endpoint.readable.getReader()
 
         // setup blockStream
@@ -51,14 +51,15 @@ export class ControlledReadableStream<T> {
 
         // pipeTo endpoint
         stream.pipeTo(this.endpoint.writable)
+        if (endpoint) this.endpoint.switch()
     }
 }
 
 export class ControlledWritableStream<T> {
     readonly endpoint: ControlledWritableEndpoint<T>
-    constructor(consumer: ChunkConsumer<T>, endpoint: ControlledWritableEndpoint<T> = new SwitchableDuplexEndpoint(),  strategy?: QueuingStrategy<T>) {
+    constructor(consumer: ChunkConsumer<T>, endpoint?: ControlledWritableEndpoint<T>,  strategy?: QueuingStrategy<T>) {
         // setup endpoint(switchable)
-        this.endpoint = endpoint
+        this.endpoint = endpoint ? endpoint : new SwitchableDuplexEndpoint()
         const signal = this.endpoint.writable.getWriter()
 
         // setup consumeStream
@@ -90,6 +91,7 @@ export class ControlledWritableStream<T> {
 
         // pipeFrom endpoint
         this.endpoint.readable.pipeTo(stream)
+        if (endpoint) this.endpoint.switch()
     }
 }
 

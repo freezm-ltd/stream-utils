@@ -21,8 +21,10 @@ export declare class DuplexEndpoint<A = any, B = any> {
     static instancify<A, B>(objectifiedEndpoint: ObjectifiedDuplexEndpoint<A, B>): DuplexEndpoint<A, B>;
 }
 export declare class SwitchableDuplexEndpoint<A = any, B = any> extends DuplexEndpoint<A, B> {
+    readonly generator?: ((context: any) => PromiseLikeOrNot<DuplexEndpoint<A, B>>) | undefined;
+    readonly context: any;
     readonly switchableReadable: SwitchableReadableStream<A>;
     readonly switchableWritable: SwitchableWritableStream<B>;
-    constructor(generator?: (context: any) => PromiseLikeOrNot<DuplexEndpoint<A, B>>, context?: any);
-    switch(endpoint: DuplexEndpoint<A, B>): Promise<void>;
+    constructor(generator?: ((context: any) => PromiseLikeOrNot<DuplexEndpoint<A, B>>) | undefined, context?: any);
+    switch(endpoint?: DuplexEndpoint<A, B>): Promise<void>;
 }
