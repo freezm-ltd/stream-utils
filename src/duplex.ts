@@ -4,7 +4,7 @@
 import { SwitchableReadableStream, SwitchableWritableStream } from "./repipe"
 
 // B.readable <- B.writable
-export class Duplex<A, B> {
+export class Duplex<A = any, B = any> {
     readonly endpoint1: DuplexEndpoint<A, B>
     readonly endpoint2: DuplexEndpoint<B, A>
 
@@ -16,13 +16,13 @@ export class Duplex<A, B> {
     }
 }
 
-export type ObjectifiedDuplexEndpoint<A, B> = { readable: ReadableStream<A>, writable: WritableStream<B> }
-export type TransferableDuplexEndpoint<A, B> = {
+export type ObjectifiedDuplexEndpoint<A = any, B = any> = { readable: ReadableStream<A>, writable: WritableStream<B> }
+export type TransferableDuplexEndpoint<A = any, B = any> = {
     endpoint: ObjectifiedDuplexEndpoint<A, B>,
     transfer: [ReadableStream<A>, WritableStream<B>]
 }
 
-export class DuplexEndpoint<A, B> {
+export class DuplexEndpoint<A = any, B = any> {
     constructor(
         readonly readable: ReadableStream<A>,
         readonly writable: WritableStream<B>
@@ -45,7 +45,7 @@ export class DuplexEndpoint<A, B> {
     }
 }
 
-export class SwitchableDuplexEndpoint<A, B> extends DuplexEndpoint<A, B> {
+export class SwitchableDuplexEndpoint<A = any, B = any> extends DuplexEndpoint<A, B> {
     readonly switchableReadable = new SwitchableReadableStream<A>()
     readonly switchableWritable = new SwitchableWritableStream<B>()
 
