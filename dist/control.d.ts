@@ -1,5 +1,5 @@
 import { PromiseLikeOrNot } from "./utils";
-import { SwitchableDuplexEndpoint } from "./duplex";
+import { ObjectifiedDuplexEndpoint, SwitchableDuplexEndpoint } from "./duplex";
 export type Block<T> = {
     id: BlockId;
     chunk: T;
@@ -8,7 +8,9 @@ export type BlockId = number;
 type ChunkGenerator<T> = () => PromiseLikeOrNot<ReadableStreamReadResult<T>>;
 type ChunkConsumer<T> = (chunk: T) => PromiseLikeOrNot<void>;
 export type ControlledReadableEndpoint<T> = SwitchableDuplexEndpoint<BlockId, Block<T>>;
+export type ObjectifiedControlledReadableEndpoint<T> = ObjectifiedDuplexEndpoint<BlockId, Block<T>>;
 export type ControlledWritableEndpoint<T> = SwitchableDuplexEndpoint<Block<T>, BlockId>;
+export type ObjectifiedControlledWritableEndpoint<T> = ObjectifiedDuplexEndpoint<Block<T>, BlockId>;
 export declare class ControlledReadableStream<T> {
     readonly endpoint: ControlledReadableEndpoint<T>;
     constructor(generator: ReadableStream<T> | ChunkGenerator<T>, strategy?: QueuingStrategy<T>);

@@ -4,7 +4,7 @@ import { fitStream, getFitter, byteFitter } from "./fit"
 import { sliceStream, sliceByteStream } from "./slice"
 import { mergeStream } from "./merge"
 import { retryableStream, retryableFetchStream } from "./retry"
-import { Block, BlockId, ControlledReadableStream, ControlledWritableStream, ControlledStreamPair, ControlledReadableEndpoint, ControlledWritableEndpoint } from "./control"
+import { Block, BlockId, ControlledReadableStream, ControlledWritableStream, ControlledStreamPair, ControlledReadableEndpoint, ControlledWritableEndpoint, ObjectifiedControlledReadableEndpoint, ObjectifiedControlledWritableEndpoint } from "./control"
 import { Duplex, DuplexEndpoint, SwitchableDuplexEndpoint, ObjectifiedDuplexEndpoint, TransferableDuplexEndpoint } from "./duplex"
 
 export {
@@ -14,6 +14,6 @@ export {
     sliceStream, sliceByteStream,
     mergeStream,
     retryableStream, retryableFetchStream,
-    Block, BlockId, ControlledReadableStream, ControlledWritableStream, ControlledStreamPair, ControlledReadableEndpoint, ControlledWritableEndpoint,
+    Block, BlockId, ControlledReadableStream, ControlledWritableStream, ControlledStreamPair, ControlledReadableEndpoint, ControlledWritableEndpoint, ObjectifiedControlledReadableEndpoint, ObjectifiedControlledWritableEndpoint,
     Duplex, DuplexEndpoint, SwitchableDuplexEndpoint, ObjectifiedDuplexEndpoint, TransferableDuplexEndpoint,
 }
