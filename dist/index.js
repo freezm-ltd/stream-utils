@@ -547,9 +547,9 @@ var SwitchableDuplexEndpoint = class extends DuplexEndpoint {
 
 // src/control.ts
 var ControlledReadableStream = class {
-  constructor(generator, strategy) {
+  constructor(generator, endpoint = new SwitchableDuplexEndpoint(), strategy) {
     if (generator instanceof ReadableStream) generator = generatorify(generator);
-    this.endpoint = new SwitchableDuplexEndpoint();
+    this.endpoint = endpoint;
     const signal = this.endpoint.readable.getReader();
     let enqueued = 0;
     let consumed = -1;
@@ -574,8 +574,8 @@ var ControlledReadableStream = class {
   }
 };
 var ControlledWritableStream = class {
-  constructor(consumer, strategy) {
-    this.endpoint = new SwitchableDuplexEndpoint();
+  constructor(consumer, endpoint = new SwitchableDuplexEndpoint(), strategy) {
+    this.endpoint = endpoint;
     const signal = this.endpoint.writable.getWriter();
     let consumed = -1;
     let interval;
@@ -607,8 +607,8 @@ var ControlledWritableStream = class {
 };
 var ControlledStreamPair = class {
   constructor(generator, consumer, readableStrategy, writableStrategy) {
-    this.readable = new ControlledReadableStream(generator, readableStrategy);
-    this.writable = new ControlledWritableStream(consumer, writableStrategy);
+    this.readable = new ControlledReadableStream(generator, void 0, readableStrategy);
+    this.writable = new ControlledWritableStream(consumer, void 0, writableStrategy);
   }
 };
 function wrapQueuingStrategy(strategy) {

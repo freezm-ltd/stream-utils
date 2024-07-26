@@ -21,11 +21,11 @@ export type ObjectifiedControlledWritableEndpoint<T> = ObjectifiedDuplexEndpoint
 
 export class ControlledReadableStream<T> {
     readonly endpoint: ControlledReadableEndpoint<T>
-    constructor(generator: ReadableStream<T> | ChunkGenerator<T>, strategy?: QueuingStrategy<T>) {
+    constructor(generator: ReadableStream<T> | ChunkGenerator<T>, endpoint: ControlledReadableEndpoint<T> = new SwitchableDuplexEndpoint(), strategy?: QueuingStrategy<T>) {
         if (generator instanceof ReadableStream) generator = generatorify(generator);
 
         // setup endpoint(switchable)
-        this.endpoint = new SwitchableDuplexEndpoint()
+        this.endpoint = endpoint
         const signal = this.endpoint.readable.getReader()
 
         // setup blockStream
@@ -56,9 +56,9 @@ export class ControlledReadableStream<T> {
 
 export class ControlledWritableStream<T> {
     readonly endpoint: ControlledWritableEndpoint<T>
-    constructor(consumer: ChunkConsumer<T>, strategy?: QueuingStrategy<T>) {
+    constructor(consumer: ChunkConsumer<T>, endpoint: ControlledWritableEndpoint<T> = new SwitchableDuplexEndpoint(),  strategy?: QueuingStrategy<T>) {
         // setup endpoint(switchable)
-        this.endpoint = new SwitchableDuplexEndpoint()
+        this.endpoint = endpoint
         const signal = this.endpoint.writable.getWriter()
 
         // setup consumeStream
@@ -96,9 +96,12 @@ export class ControlledWritableStream<T> {
 export class ControlledStreamPair<T> {
     readonly readable: ControlledReadableStream<T>
     readonly writable: ControlledWritableStream<T>
-    constructor(generator: ChunkGenerator<T>, consumer: ChunkConsumer<T>, readableStrategy?: QueuingStrategy<T>, writableStrategy?: QueuingStrategy<T>) {
-        this.readable = new ControlledReadableStream(generator, readableStrategy)
-        this.writable = new ControlledWritableStream(consumer, writableStrategy)
+    constructor(
+        generator: ChunkGenerator<T>, consumer: ChunkConsumer<T>, 
+        readableStrategy?: QueuingStrategy<T>, writableStrategy?: QueuingStrategy<T>
+    ) {
+        this.readable = new ControlledReadableStream(generator, undefined, readableStrategy)
+        this.writable = new ControlledWritableStream(consumer, undefined, writableStrategy)
     }
 }
 
