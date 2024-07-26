@@ -511,7 +511,7 @@ var DuplexEndpoint = class _DuplexEndpoint {
   }
 };
 var SwitchableDuplexEndpoint = class extends DuplexEndpoint {
-  constructor(generator) {
+  constructor(generator, context) {
     const switchEmitter = new EventTarget2();
     if (generator) {
       let readableRequired = false, writableRequired = false;
@@ -521,7 +521,7 @@ var SwitchableDuplexEndpoint = class extends DuplexEndpoint {
         if (readableRequired && writableRequired) {
           readableRequired = false;
           writableRequired = false;
-          switchEmitter.dispatch("generate", await generator());
+          switchEmitter.dispatch("generate", await generator(context));
         }
       });
     }

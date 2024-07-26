@@ -51,7 +51,7 @@ export class SwitchableDuplexEndpoint<A = any, B = any> extends DuplexEndpoint<A
     readonly switchableReadable = new SwitchableReadableStream<A>()
     readonly switchableWritable = new SwitchableWritableStream<B>()
 
-    constructor(generator?: () => PromiseLikeOrNot<DuplexEndpoint<A, B>>) {
+    constructor(generator?: (context?: any) => PromiseLikeOrNot<DuplexEndpoint<A, B>>, context?: any) {
         const switchEmitter = new EventTarget2()
         if (generator) { // automatic switching
             let readableRequired = false, writableRequired = false;
@@ -60,7 +60,7 @@ export class SwitchableDuplexEndpoint<A = any, B = any> extends DuplexEndpoint<A
                 if (e.detail === "writable") writableRequired = true;
                 if (readableRequired && writableRequired) {
                     readableRequired = false; writableRequired = false;
-                    switchEmitter.dispatch("generate", await generator())
+                    switchEmitter.dispatch("generate", await generator(context))
                 }
             })
         }
