@@ -9,14 +9,43 @@
 
 <body>
     <script type="module">
-        import { retryableFetchStream, mergeStream, sliceByteStream, ControlledStreamPair } from "./index.js"
+        import { retryableFetchStream, mergeStream, sliceByteStream, ControlledStreamPair, Duplex, SwitchableReadableStream } from "./index.js"
 
         function sleep(ms) {
             return new Promise((resolve) => setTimeout(resolve, ms));
         }
 
         window.test = {
-            controlledStream: (num = 100, stdms = 20) => {
+            switchableStream: async (num = 100, stdms = 20) => {
+                let i = 0
+                const stream = new ReadableStream({
+                    async pull(controller) {
+                        if (i > num) controller.close();
+                        else {
+                            const ms = stdms * Math.random()
+                            await sleep(ms)
+                            controller.enqueue(`${i}, sleeped:${ms}`);
+                            console.log(`enqueued:${i}`)
+                        }
+                        i++
+                    }
+                })
+                const switchable = new SwitchableReadableStream()
+                switchable.stream.pipeTo(new WritableStream({
+                    write(chunk) {
+                        console.log(chunk)
+                    }
+                }))
+                let reconnect = 0
+                while (num / 10 > reconnect) {
+                    reconnect++
+                    console.log("reconnect start", reconnect)
+                    await switchable.switch(stream)
+                    console.log("reconnect end", reconnect)
+                    await sleep(stdms * Math.random() * 10)
+                }
+            },
+            controlledStream: async (num = 100, stdms = 20) => {
                 let id = -1
                 const gen = async () => {
                     const ms = stdms * Math.random()
@@ -34,7 +63,23 @@
                     console.log(data, `sleeped:${ms}`)
                 }
                 const { readable, writable } = new ControlledStreamPair(gen, con)
-                readable.pipeTo(writable)
+                let reconnect = 0
+                while (Math.round(num / 5) > reconnect) {
+                    reconnect++
+                    console.log("reconnect:", reconnect)
+                    const { endpoint1, endpoint2 } = new Duplex()
+                    await Promise.all([
+                        (async () => {
+                            await sleep(Math.random() * stdms)
+                            await readable.endpoint.switch(endpoint1)
+                        })(),
+                        (async () => {
+                            await sleep(Math.random() * stdms)
+                            await writable.endpoint.switch(endpoint2)
+                        })()
+                    ])
+                    await sleep(stdms * Math.random() * 5)
+                }
             },
             retryableFetchStream: async (url) => {
                 let receive = 0

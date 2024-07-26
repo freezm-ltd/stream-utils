@@ -1,5 +1,8 @@
 // endpoint1      endpoint2
 // A.writable -> A.readable
+
+import { SwitchableReadableStream, SwitchableWritableStream } from "./repipe"
+
 // B.readable <- B.writable
 export class Duplex<A, B> {
     readonly endpoint1: DuplexEndpoint<A, B>
@@ -39,5 +42,23 @@ export class DuplexEndpoint<A, B> {
     // restore duplex from postMessage
     static instancify<A, B>(objectifiedEndpoint: ObjectifiedDuplexEndpoint<A, B>): DuplexEndpoint<A, B> {
         return new DuplexEndpoint(objectifiedEndpoint.readable, objectifiedEndpoint.writable)
+    }
+}
+
+export class SwitchableDuplexEndpoint<A, B> extends DuplexEndpoint<A, B> {
+    readonly switchableReadable = new SwitchableReadableStream<A>()
+    readonly switchableWritable = new SwitchableWritableStream<B>()
+
+    constructor() {
+        const switchableReadable = new SwitchableReadableStream<A>()
+        const switchableWritable = new SwitchableWritableStream<B>()
+        super(switchableReadable.stream, switchableWritable.stream)
+        this.switchableReadable = switchableReadable
+        this.switchableWritable = switchableWritable
+    }
+    
+    switch(endpoint: DuplexEndpoint<A, B>) {
+        this.switchableReadable.switch(endpoint.readable)
+        this.switchableWritable.switch(endpoint.writable)
     }
 }

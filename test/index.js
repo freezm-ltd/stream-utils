@@ -217,6 +217,17 @@ function lengthCallback(callback, key = "length") {
   });
 }
 
+// src/utils.ts
+async function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+function mergeSignal(signal1, signal2) {
+  const controller = new AbortController();
+  signal1.onabort = (e) => controller.abort(e.target.reason);
+  signal2.onabort = (e) => controller.abort(e.target.reason);
+  return controller.signal;
+}
+
 // src/repipe.ts
 var AbstractSwitchableStream = class extends EventTarget2 {
   // to identify intended abort
@@ -229,7 +240,7 @@ var AbstractSwitchableStream = class extends EventTarget2 {
     this.abortReason = "SwitchableStreamAbortForSwitching";
     this.isSwitching = false;
   }
-  async switch(to) {
+  switch(to) {
     let generator;
     if (!to) {
       if (this.isSwitching) return;
@@ -241,19 +252,16 @@ var AbstractSwitchableStream = class extends EventTarget2 {
       this.controller.abort(this.abortReason);
       this.controller = new AbortController();
       this.context.signal = this.controller.signal;
-      while (!to) {
-        try {
-          to = await generator(this.context);
-        } catch (e) {
-        }
-      }
+      if (!to) to = await generator(this.context);
       const { readable, writable } = this.target(to);
+      for (let i = 0; readable.locked || writable.locked; i += 10) await sleep(i);
       readable.pipeTo(writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.context.signal }).then(() => {
-        writable.close();
+        writable.close().catch();
       }).catch((e) => {
         if (e !== this.abortReason) this.switch();
       });
       this.isSwitching = false;
+      this.dispatch("switch-done");
     });
   }
   abort() {
@@ -266,7 +274,13 @@ var SwitchableReadableStream = class extends AbstractSwitchableStream {
     this.generator = generator;
     this.context = context;
     this.strategy = strategy;
-    const pipe = new TransformStream(void 0, void 0, strategy);
+    const _this = this;
+    const pipe = new TransformStream({
+      async transform(chunk, controller) {
+        if (_this.isSwitching) await _this.waitFor("switch-done");
+        controller.enqueue(chunk);
+      }
+    }, void 0, strategy);
     this.stream = pipe.readable;
     this.writable = pipe.writable;
   }
@@ -283,7 +297,13 @@ var SwitchableWritableStream = class extends AbstractSwitchableStream {
     this.generator = generator;
     this.context = context;
     this.strategy = strategy;
-    const pipe = new TransformStream(void 0, strategy);
+    const _this = this;
+    const pipe = new TransformStream({
+      async transform(chunk, controller) {
+        if (_this.isSwitching) await _this.waitFor("switch-done");
+        controller.enqueue(chunk);
+      }
+    }, strategy);
     this.stream = pipe.writable;
     this.readable = pipe.readable;
   }
@@ -407,14 +427,6 @@ function mergeStream(generators, option) {
   return readable;
 }
 
-// src/utils.ts
-function mergeSignal(signal1, signal2) {
-  const controller = new AbortController();
-  signal1.onabort = (e) => controller.abort(e.target.reason);
-  signal2.onabort = (e) => controller.abort(e.target.reason);
-  return controller.signal;
-}
-
 // src/retry.ts
 function retryableStream(context, readableGenerator, option, sensor) {
   let _option = { slowDown: 5e3, minSpeed: 5120, minDuration: 1e4 };
@@ -471,83 +483,6 @@ function retryableFetchStream(input, init, option) {
   return retryableStream(context, readableGenerator, option);
 }
 
-// src/control.ts
-function wrapQueuingStrategy(strategy) {
-  if (strategy) {
-    const size = strategy.size;
-    return {
-      highWaterMark: strategy.highWaterMark,
-      size: size ? (block) => size(block.chunk) : void 0
-    };
-  }
-  return void 0;
-}
-function generatorify(readable) {
-  const reader = readable.getReader();
-  return reader.read;
-}
-var ControlledReadableStream = class {
-  constructor(generator, signaler, strategy) {
-    if (generator instanceof ReadableStream) generator = generatorify(generator);
-    const signal = signaler.getReader();
-    let consumedId = -1;
-    let id = 0;
-    this.readable = new ReadableStream({
-      async pull(controller) {
-        const { value, done } = await generator();
-        if (done) {
-          controller.close();
-        } else {
-          controller.enqueue({ id, chunk: value });
-          while (consumedId < id) {
-            const result = await signal.read();
-            if (result.done) return;
-            consumedId = result.value;
-          }
-          id++;
-        }
-      }
-    }, wrapQueuingStrategy(strategy));
-  }
-};
-var ControlledWritableStream = class {
-  constructor(consumer, strategy) {
-    const initEmitter = new EventTarget2();
-    let initFired = false;
-    let controller;
-    this.writable = new WritableStream({
-      async write(block) {
-        await consumer(block.chunk);
-        if (!initFired) await initEmitter.waitFor("start");
-        controller.enqueue(block.id);
-      },
-      async close() {
-        if (!initFired) await initEmitter.waitFor("start");
-        controller.close();
-      },
-      async abort(reason) {
-        if (!initFired) await initEmitter.waitFor("start");
-        controller.error(reason);
-      }
-    }, wrapQueuingStrategy(strategy));
-    this.signaler = new ReadableStream({
-      start(_controller) {
-        initFired = true;
-        initEmitter.dispatch("start");
-        controller = _controller;
-      }
-    });
-  }
-};
-var ControlledStreamPair = class {
-  constructor(generator, consumer, readableStrategy, writableStrategy) {
-    const { writable, signaler } = new ControlledWritableStream(consumer, writableStrategy);
-    const { readable } = new ControlledReadableStream(generator, signaler, readableStrategy);
-    this.writable = writable;
-    this.readable = readable;
-  }
-};
-
 // src/duplex.ts
 var Duplex = class {
   constructor() {
@@ -575,6 +510,102 @@ var DuplexEndpoint = class _DuplexEndpoint {
     return new _DuplexEndpoint(objectifiedEndpoint.readable, objectifiedEndpoint.writable);
   }
 };
+var SwitchableDuplexEndpoint = class extends DuplexEndpoint {
+  constructor() {
+    const switchableReadable = new SwitchableReadableStream();
+    const switchableWritable = new SwitchableWritableStream();
+    super(switchableReadable.stream, switchableWritable.stream);
+    this.switchableReadable = new SwitchableReadableStream();
+    this.switchableWritable = new SwitchableWritableStream();
+    this.switchableReadable = switchableReadable;
+    this.switchableWritable = switchableWritable;
+  }
+  switch(endpoint) {
+    this.switchableReadable.switch(endpoint.readable);
+    this.switchableWritable.switch(endpoint.writable);
+  }
+};
+
+// src/control.ts
+var ControlledReadableStream = class {
+  constructor(generator, strategy) {
+    if (generator instanceof ReadableStream) generator = generatorify(generator);
+    this.endpoint = new SwitchableDuplexEndpoint();
+    const signal = this.endpoint.readable.getReader();
+    let enqueued = 0;
+    let consumed = -1;
+    const stream = new ReadableStream({
+      async pull(controller) {
+        const { value, done } = await generator();
+        if (done) {
+          controller.close();
+        } else {
+          const block = { id: enqueued, chunk: value };
+          while (consumed < enqueued) {
+            controller.enqueue(block);
+            const result = await signal.read();
+            if (result.done) return;
+            consumed = result.value;
+          }
+          enqueued++;
+        }
+      }
+    }, wrapQueuingStrategy(strategy));
+    stream.pipeTo(this.endpoint.writable);
+  }
+};
+var ControlledWritableStream = class {
+  constructor(consumer, strategy) {
+    this.endpoint = new SwitchableDuplexEndpoint();
+    const signal = this.endpoint.writable.getWriter();
+    let consumed = -1;
+    let interval;
+    const stream = new WritableStream({
+      async write(block) {
+        if (interval) clearInterval(interval);
+        if (block.id > consumed) {
+          await consumer(block.chunk);
+          consumed = block.id;
+        }
+        signal.write(block.id);
+        interval = globalThis.setInterval(() => {
+          signal.write(block.id).catch(async () => {
+            if (await signal.closed) clearInterval(interval);
+          });
+        }, 1e3);
+      },
+      async close() {
+        if (interval) clearInterval(interval);
+        signal.close();
+      },
+      async abort(reason) {
+        if (interval) clearInterval(interval);
+        signal.abort(reason);
+      }
+    }, wrapQueuingStrategy(strategy));
+    this.endpoint.readable.pipeTo(stream);
+  }
+};
+var ControlledStreamPair = class {
+  constructor(generator, consumer, readableStrategy, writableStrategy) {
+    this.readable = new ControlledReadableStream(generator, readableStrategy);
+    this.writable = new ControlledWritableStream(consumer, writableStrategy);
+  }
+};
+function wrapQueuingStrategy(strategy) {
+  if (strategy) {
+    const size = strategy.size;
+    return {
+      highWaterMark: strategy.highWaterMark,
+      size: size ? (block) => size(block.chunk) : void 0
+    };
+  }
+  return void 0;
+}
+function generatorify(readable) {
+  const reader = readable.getReader();
+  return reader.read;
+}
 export {
   ControlledReadableStream,
   ControlledStreamPair,

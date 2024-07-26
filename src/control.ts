@@ -1,6 +1,7 @@
 import { EventTarget2 } from "@freezm-ltd/event-target-2"
 import { PromiseLikeOrNot } from "./utils"
-import { Duplex, DuplexEndpoint } from "./duplex"
+import { Duplex, DuplexEndpoint, SwitchableDuplexEndpoint } from "./duplex"
+import { SwitchableWritableStream } from "./repipe"
 
 type Block<T> = { id: BlockId, chunk: T }
 type BlockId = number
@@ -15,15 +16,86 @@ type ChunkConsumer<T> = (chunk: T) => PromiseLikeOrNot<void>
 */
 
 
-export class ControlledReadableStream2<T> {
-    constructor(generator: ReadableStream<T> | ChunkGenerator<T>, endpoint: DuplexEndpoint<Block<T>, BlockId>, strategy?: QueuingStrategy<T>) {
-        
+export class ControlledReadableStream<T> {
+    readonly endpoint: SwitchableDuplexEndpoint<BlockId, Block<T>>
+    constructor(generator: ReadableStream<T> | ChunkGenerator<T>, strategy?: QueuingStrategy<T>) {
+        if (generator instanceof ReadableStream) generator = generatorify(generator);
+
+        // setup endpoint(switchable)
+        this.endpoint = new SwitchableDuplexEndpoint()
+        const signal = this.endpoint.readable.getReader()
+
+        // setup blockStream
+        let enqueued = 0
+        let consumed = -1
+        const stream = new ReadableStream({
+            async pull(controller) {
+                const { value, done } = await generator()
+                if (done) {
+                    controller.close()
+                } else {
+                    const block = { id: enqueued, chunk: value }
+                    while (consumed < enqueued) { // continuously enqueue and wait for consume current chunk
+                        controller.enqueue(block)
+                        const result = await signal.read()
+                        if (result.done) return; // end
+                        consumed = result.value // consumed
+                    }
+                    enqueued++
+                }
+            }
+        }, wrapQueuingStrategy(strategy))
+
+        // pipeTo endpoint
+        stream.pipeTo(this.endpoint.writable)
     }
 }
 
-export class ControlledWritableStream2<T> {
-    constructor(consumer: ChunkConsumer<T>, endpoint: DuplexEndpoint<BlockId, Block<T>>, strategy?: QueuingStrategy<T>) {
-        
+export class ControlledWritableStream<T> {
+    readonly endpoint: SwitchableDuplexEndpoint<Block<T>, BlockId>
+    constructor(consumer: ChunkConsumer<T>, strategy?: QueuingStrategy<T>) {
+        // setup endpoint(switchable)
+        this.endpoint = new SwitchableDuplexEndpoint()
+        const signal = this.endpoint.writable.getWriter()
+
+        // setup consumeStream
+        let consumed = -1
+        let interval: number
+        const stream = new WritableStream({
+            async write(block) {
+                if (interval) clearInterval(interval);
+                if (block.id > consumed) { // consume only new block
+                    await consumer(block.chunk)
+                    consumed = block.id
+                }
+                signal.write(block.id)
+                interval = (globalThis as WindowOrWorkerGlobalScope).setInterval(() => { // continuously write signal
+                    signal.write(block.id).catch(async () => {
+                        if (await signal.closed) clearInterval(interval); // if closed, clearInterval
+                    })
+                }, 1000)
+            },
+            async close() {
+                if (interval) clearInterval(interval);
+                signal.close()
+            },
+            async abort(reason) {
+                if (interval) clearInterval(interval);
+                signal.abort(reason)
+            },
+        }, wrapQueuingStrategy(strategy))
+
+        // pipeFrom endpoint
+        this.endpoint.readable.pipeTo(stream)
+    }
+}
+
+export class ControlledStreamPair<T> {
+    readonly readable: ControlledReadableStream<T>
+    readonly writable: ControlledWritableStream<T>
+    constructor(generator: ChunkGenerator<T>, consumer: ChunkConsumer<T>, readableStrategy?: QueuingStrategy<T>, writableStrategy?: QueuingStrategy<T>) {
+        this.readable = new ControlledReadableStream(generator, readableStrategy)
+        this.writable = new ControlledWritableStream(consumer, writableStrategy)
     }
 }
 
@@ -46,7 +118,7 @@ function generatorify<T>(readable: ReadableStream<T>): ChunkGenerator<T> {
 //      enqueue signal <------ signaler(ReadableStream) ------ consuming done signal
 //            |                                                            | 
 // ControlledReadableStream.readable -> piping & transfer -> ControlledWritableStream.writable (async-sink consume)
-export class ControlledReadableStream<T> {
+export class _ControlledReadableStream<T> {
     readonly readable: ReadableStream<Block<T>>
     constructor(generator: ReadableStream<T> | ChunkGenerator<T>, signaler: ReadableStream<BlockId>, strategy?: QueuingStrategy<T>) {
         if (generator instanceof ReadableStream) generator = generatorify(generator);
@@ -62,7 +134,7 @@ export class ControlledReadableStream<T> {
                     controller.close()
                 } else {
                     controller.enqueue({ id, chunk: value })
-                    while(consumedId < id) {
+                    while (consumedId < id) {
                         const result = await signal.read()
                         if (result.done) return;
                         consumedId = result.value
@@ -74,7 +146,7 @@ export class ControlledReadableStream<T> {
     }
 }
 
-export class ControlledWritableStream<T> {
+export class _ControlledWritableStream<T> {
     readonly writable: WritableStream<Block<T>>
     readonly signaler: ReadableStream<BlockId>
     constructor(consumer: ChunkConsumer<T>, strategy?: QueuingStrategy<T>) {
@@ -108,12 +180,12 @@ export class ControlledWritableStream<T> {
     }
 }
 
-export class ControlledStreamPair<T> {
+export class _ControlledStreamPair<T> {
     readonly readable: ReadableStream<Block<T>>
     readonly writable: WritableStream<Block<T>>
     constructor(generator: ChunkGenerator<T>, consumer: ChunkConsumer<T>, readableStrategy?: QueuingStrategy<T>, writableStrategy?: QueuingStrategy<T>) {
-        const { writable, signaler } = new ControlledWritableStream(consumer, writableStrategy)
-        const { readable } = new ControlledReadableStream(generator, signaler, readableStrategy)
+        const { writable, signaler } = new _ControlledWritableStream(consumer, writableStrategy)
+        const { readable } = new _ControlledReadableStream(generator, signaler, readableStrategy)
         this.writable = writable
         this.readable = readable
     }
