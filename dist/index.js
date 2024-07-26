@@ -514,12 +514,11 @@ var SwitchableDuplexEndpoint = class extends DuplexEndpoint {
   constructor(generator) {
     const switchEmitter = new EventTarget2();
     if (generator) {
-      let readableRequired = false;
-      let writableRequired = false;
+      let readableRequired = false, writableRequired = false;
       switchEmitter.listen("require", async (e) => {
         if (e.detail === "readable") readableRequired = true;
         if (e.detail === "writable") writableRequired = true;
-        if (readableRequired && writableRequired && generator) {
+        if (readableRequired && writableRequired) {
           readableRequired = false;
           writableRequired = false;
           switchEmitter.dispatch("generate", await generator());
