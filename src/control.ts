@@ -11,11 +11,11 @@ export type ObjectifiedControlledReadableEndpoint<T> = ObjectifiedDuplexEndpoint
 export type ControlledWritableEndpoint<T> = SwitchableDuplexEndpoint<Block<T>, BlockId>
 export type ObjectifiedControlledWritableEndpoint<T> = ObjectifiedDuplexEndpoint<Block<T>, BlockId>
 
-/*                                               Block<T>
-            T                                     --->                                     T
-    source ---> ControlledReadableStream <endpoint>   <endpoint> ControlledWritableStream ---> sink (async consumed)
-       |                                          <---                                               |
-            <---       pull       <---           BlockId       <---          signal          <---
+/*                                                 Block<T>
+            T                                       --->                                      T
+    source ---> ControlledReadableStream <SwitchableDuplexEndpoint> ControlledWritableStream ---> sink (async consumed)
+       |                                            <---                                                     |
+            <---       pull          <---         BlockId        <---          signal          <---
 */
 
 
