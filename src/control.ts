@@ -19,9 +19,11 @@ export type ObjectifiedControlledWritableEndpoint<T> = ObjectifiedDuplexEndpoint
 */
 
 
-export class ControlledReadableStream<T> {
+export class ControlledReadableStream<T> extends EventTarget2 {
     readonly endpoint: ControlledReadableEndpoint<T>
     constructor(generator: ReadableStream<T> | ChunkGenerator<T>, endpoint?: ControlledReadableEndpoint<T>, strategy?: QueuingStrategy<T>) {
+        super()
+
         if (generator instanceof ReadableStream) generator = generatorify(generator);
 
         // setup endpoint(switchable)
@@ -50,14 +52,16 @@ export class ControlledReadableStream<T> {
         }, wrapQueuingStrategy(strategy))
 
         // pipeTo endpoint
-        stream.pipeTo(this.endpoint.writable)
+        stream.pipeTo(this.endpoint.writable).then(() => this.dispatch("close"))
         if (endpoint) this.endpoint.switch()
     }
 }
 
-export class ControlledWritableStream<T> {
+export class ControlledWritableStream<T> extends EventTarget2 {
     readonly endpoint: ControlledWritableEndpoint<T>
     constructor(consumer: ChunkConsumer<T>, endpoint?: ControlledWritableEndpoint<T>,  strategy?: QueuingStrategy<T>) {
+        super()
+
         // setup endpoint(switchable)
         this.endpoint = endpoint ? endpoint : new SwitchableDuplexEndpoint()
         const signal = this.endpoint.writable.getWriter()
@@ -90,7 +94,7 @@ export class ControlledWritableStream<T> {
         }, wrapQueuingStrategy(strategy))
 
         // pipeFrom endpoint
-        this.endpoint.readable.pipeTo(stream)
+        this.endpoint.readable.pipeTo(stream).then(() => this.dispatch("close"))
         if (endpoint) this.endpoint.switch()
     }
 }

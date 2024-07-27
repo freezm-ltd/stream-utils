@@ -550,8 +550,9 @@ var SwitchableDuplexEndpoint = class extends DuplexEndpoint {
 };
 
 // src/control.ts
-var ControlledReadableStream = class {
+var ControlledReadableStream = class extends EventTarget2 {
   constructor(generator, endpoint, strategy) {
+    super();
     if (generator instanceof ReadableStream) generator = generatorify(generator);
     this.endpoint = endpoint ? endpoint : new SwitchableDuplexEndpoint();
     const signal = this.endpoint.readable.getReader();
@@ -574,12 +575,13 @@ var ControlledReadableStream = class {
         }
       }
     }, wrapQueuingStrategy(strategy));
-    stream.pipeTo(this.endpoint.writable);
+    stream.pipeTo(this.endpoint.writable).then(() => this.dispatch("close"));
     if (endpoint) this.endpoint.switch();
   }
 };
-var ControlledWritableStream = class {
+var ControlledWritableStream = class extends EventTarget2 {
   constructor(consumer, endpoint, strategy) {
+    super();
     this.endpoint = endpoint ? endpoint : new SwitchableDuplexEndpoint();
     const signal = this.endpoint.writable.getWriter();
     let consumed = -1;
@@ -607,7 +609,7 @@ var ControlledWritableStream = class {
         signal.abort(reason);
       }
     }, wrapQueuingStrategy(strategy));
-    this.endpoint.readable.pipeTo(stream);
+    this.endpoint.readable.pipeTo(stream).then(() => this.dispatch("close"));
     if (endpoint) this.endpoint.switch();
   }
 };

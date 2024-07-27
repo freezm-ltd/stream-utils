@@ -1,3 +1,4 @@
+import { EventTarget2 } from "@freezm-ltd/event-target-2";
 import { PromiseLikeOrNot } from "./utils";
 import { ObjectifiedDuplexEndpoint, SwitchableDuplexEndpoint } from "./duplex";
 export type Block<T> = {
@@ -11,11 +12,11 @@ export type ControlledReadableEndpoint<T> = SwitchableDuplexEndpoint<BlockId, Bl
 export type ObjectifiedControlledReadableEndpoint<T> = ObjectifiedDuplexEndpoint<BlockId, Block<T>>;
 export type ControlledWritableEndpoint<T> = SwitchableDuplexEndpoint<Block<T>, BlockId>;
 export type ObjectifiedControlledWritableEndpoint<T> = ObjectifiedDuplexEndpoint<Block<T>, BlockId>;
-export declare class ControlledReadableStream<T> {
+export declare class ControlledReadableStream<T> extends EventTarget2 {
     readonly endpoint: ControlledReadableEndpoint<T>;
     constructor(generator: ReadableStream<T> | ChunkGenerator<T>, endpoint?: ControlledReadableEndpoint<T>, strategy?: QueuingStrategy<T>);
 }
-export declare class ControlledWritableStream<T> {
+export declare class ControlledWritableStream<T> extends EventTarget2 {
     readonly endpoint: ControlledWritableEndpoint<T>;
     constructor(consumer: ChunkConsumer<T>, endpoint?: ControlledWritableEndpoint<T>, strategy?: QueuingStrategy<T>);
 }
