@@ -630,14 +630,9 @@ function wrapQueuingStrategy(strategy) {
   return void 0;
 }
 function generatorify(readable) {
-  const generator = async function* _() {
-    for await (const chunk of readable) {
-      yield chunk;
-    }
-    return null;
-  }();
+  const reader = readable.getReader();
   return async () => {
-    return await generator.next();
+    return await reader.read();
   };
 }
 export {

@@ -123,11 +123,6 @@ function wrapQueuingStrategy<T>(strategy?: QueuingStrategy<T>) {
 }
 
 function generatorify<T>(readable: ReadableStream<T>): ChunkGenerator<T> {
-    const generator = (async function* _() {
-        for await (const chunk of readable) {
-            yield chunk
-        }
-        return null
-    })()
-    return (async () => { return await generator.next() }) as ChunkGenerator<T>
+    const reader = readable.getReader()
+    return (async () => { return await reader.read() })
 }
