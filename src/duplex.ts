@@ -68,9 +68,11 @@ export class SwitchableDuplexEndpoint<A = any, B = any> extends DuplexEndpoint<A
             })
         }
         const switchableReadable = new SwitchableReadableStream<A>(generator ? async () => {
+            switchEmitter.dispatch("require", "readable")
             return (await switchEmitter.waitFor<DuplexEndpoint<A, B>>("generate")).readable
         } : undefined)
         const switchableWritable = new SwitchableWritableStream<B>(generator ? async () => {
+            switchEmitter.dispatch("require", "writable")
             return (await switchEmitter.waitFor<DuplexEndpoint<A, B>>("generate")).writable
         } : undefined)
         super(switchableReadable.stream, switchableWritable.stream)

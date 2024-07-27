@@ -227,6 +227,8 @@ function mergeSignal(signal1, signal2) {
   signal2.onabort = (e) => controller.abort(e.target.reason);
   return controller.signal;
 }
+function noop(..._) {
+}
 
 // src/repipe.ts
 var AbstractSwitchableStream = class extends EventTarget2 {
@@ -526,9 +528,11 @@ var SwitchableDuplexEndpoint = class extends DuplexEndpoint {
       });
     }
     const switchableReadable = new SwitchableReadableStream(generator ? async () => {
+      switchEmitter.dispatch("require", "readable");
       return (await switchEmitter.waitFor("generate")).readable;
     } : void 0);
     const switchableWritable = new SwitchableWritableStream(generator ? async () => {
+      switchEmitter.dispatch("require", "writable");
       return (await switchEmitter.waitFor("generate")).writable;
     } : void 0);
     super(switchableReadable.stream, switchableWritable.stream);
@@ -551,7 +555,7 @@ var SwitchableDuplexEndpoint = class extends DuplexEndpoint {
 
 // src/control.ts
 var ControlledReadableStream = class extends EventTarget2 {
-  constructor(generator, endpoint, strategy) {
+  constructor(generator, endpoint, strategy, chunkCallback2) {
     super();
     if (generator instanceof ReadableStream) generator = generatorify(generator);
     this.endpoint = endpoint ? endpoint : new SwitchableDuplexEndpoint();
@@ -572,6 +576,7 @@ var ControlledReadableStream = class extends EventTarget2 {
             consumed = result.value;
           }
           enqueued++;
+          if (chunkCallback2) chunkCallback2(value);
         }
       }
     }, wrapQueuingStrategy(strategy));
@@ -582,6 +587,12 @@ var ControlledReadableStream = class extends EventTarget2 {
 var ControlledWritableStream = class extends EventTarget2 {
   constructor(consumer, endpoint, strategy) {
     super();
+    let writer = { close: noop, abort: noop };
+    if (consumer instanceof WritableStream) {
+      const result = consumerify(consumer);
+      consumer = result.consumer;
+      writer = result.writer;
+    }
     this.endpoint = endpoint ? endpoint : new SwitchableDuplexEndpoint();
     const signal = this.endpoint.writable.getWriter();
     let consumed = -1;
@@ -603,10 +614,12 @@ var ControlledWritableStream = class extends EventTarget2 {
       async close() {
         if (interval) clearInterval(interval);
         signal.close();
+        writer.close();
       },
       async abort(reason) {
         if (interval) clearInterval(interval);
         signal.abort(reason);
+        writer.abort(reason);
       }
     }, wrapQueuingStrategy(strategy));
     this.endpoint.readable.pipeTo(stream).then(() => this.dispatch("close"));
@@ -634,6 +647,12 @@ function generatorify(readable) {
   return async () => {
     return await reader.read();
   };
+}
+function consumerify(writable) {
+  const writer = writable.getWriter();
+  return { consumer: async (chunk) => {
+    return await writer.write(chunk);
+  }, writer };
 }
 export {
   ControlledReadableStream,

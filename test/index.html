@@ -9,7 +9,7 @@
 
 <body>
     <script type="module">
-        import { retryableFetchStream, mergeStream, sliceByteStream, ControlledStreamPair, Duplex, SwitchableReadableStream } from "./index.js"
+        import { retryableFetchStream, mergeStream, sliceByteStream, ControlledStreamPair, ControlledReadableStream, ControlledWritableStream, Duplex, SwitchableReadableStream, SwitchableDuplexEndpoint } from "./index.js"
 
         function sleep(ms) {
             return new Promise((resolve) => setTimeout(resolve, ms));
@@ -62,7 +62,16 @@
                     await sleep(ms)
                     console.log(data, `sleeped:${ms}`)
                 }
-                const { readable, writable } = new ControlledStreamPair(gen, con)
+                
+                const { endpoint1, endpoint2 } = new Duplex()
+                const readable = new ControlledReadableStream(gen, new SwitchableDuplexEndpoint(() => {
+                    console.log("readable: switch init")
+                    return endpoint1
+                }))
+                const writable = new ControlledWritableStream(con, new SwitchableDuplexEndpoint(() => {
+                    console.log("writable: switch init")
+                    return endpoint2
+                }))
                 let reconnect = 0
                 while (Math.round(num / 5) > reconnect) {
                     reconnect++

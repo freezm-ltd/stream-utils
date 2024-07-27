@@ -14,11 +14,11 @@ export type ControlledWritableEndpoint<T> = SwitchableDuplexEndpoint<Block<T>, B
 export type ObjectifiedControlledWritableEndpoint<T> = ObjectifiedDuplexEndpoint<Block<T>, BlockId>;
 export declare class ControlledReadableStream<T> extends EventTarget2 {
     readonly endpoint: ControlledReadableEndpoint<T>;
-    constructor(generator: ReadableStream<T> | ChunkGenerator<T>, endpoint?: ControlledReadableEndpoint<T>, strategy?: QueuingStrategy<T>);
+    constructor(generator: ReadableStream<T> | ChunkGenerator<T>, endpoint?: ControlledReadableEndpoint<T>, strategy?: QueuingStrategy<T>, chunkCallback?: (chunk: T) => any);
 }
 export declare class ControlledWritableStream<T> extends EventTarget2 {
     readonly endpoint: ControlledWritableEndpoint<T>;
-    constructor(consumer: ChunkConsumer<T>, endpoint?: ControlledWritableEndpoint<T>, strategy?: QueuingStrategy<T>);
+    constructor(consumer: WritableStream<T> | ChunkConsumer<T>, endpoint?: ControlledWritableEndpoint<T>, strategy?: QueuingStrategy<T>);
 }
 export declare class ControlledStreamPair<T> {
     readonly readable: ControlledReadableStream<T>;

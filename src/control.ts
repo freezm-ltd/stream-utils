@@ -1,5 +1,5 @@
 import { EventTarget2 } from "@freezm-ltd/event-target-2"
-import { PromiseLikeOrNot } from "./utils"
+import { noop, PromiseLikeOrNot } from "./utils"
 import { ObjectifiedDuplexEndpoint, SwitchableDuplexEndpoint } from "./duplex"
 
 export type Block<T> = { id: BlockId, chunk: T }
@@ -21,7 +21,12 @@ export type ObjectifiedControlledWritableEndpoint<T> = ObjectifiedDuplexEndpoint
 
 export class ControlledReadableStream<T> extends EventTarget2 {
     readonly endpoint: ControlledReadableEndpoint<T>
-    constructor(generator: ReadableStream<T> | ChunkGenerator<T>, endpoint?: ControlledReadableEndpoint<T>, strategy?: QueuingStrategy<T>) {
+    constructor(
+        generator: ReadableStream<T> | ChunkGenerator<T>, 
+        endpoint?: ControlledReadableEndpoint<T>, 
+        strategy?: QueuingStrategy<T>, 
+        chunkCallback?: (chunk: T) => any
+    ) {
         super()
 
         if (generator instanceof ReadableStream) generator = generatorify(generator);
@@ -47,6 +52,7 @@ export class ControlledReadableStream<T> extends EventTarget2 {
                         consumed = result.value // consumed
                     }
                     enqueued++
+                    if (chunkCallback) chunkCallback(value);
                 }
             }
         }, wrapQueuingStrategy(strategy))
@@ -59,8 +65,19 @@ export class ControlledReadableStream<T> extends EventTarget2 {
 
 export class ControlledWritableStream<T> extends EventTarget2 {
     readonly endpoint: ControlledWritableEndpoint<T>
-    constructor(consumer: ChunkConsumer<T>, endpoint?: ControlledWritableEndpoint<T>, strategy?: QueuingStrategy<T>) {
+    constructor(
+        consumer: WritableStream<T> | ChunkConsumer<T>, 
+        endpoint?: ControlledWritableEndpoint<T>, 
+        strategy?: QueuingStrategy<T>
+    ) {
         super()
+
+        let writer = { close: noop, abort: noop }
+        if (consumer instanceof WritableStream) {
+            const result = consumerify(consumer);
+            consumer = result.consumer
+            writer = result.writer
+        }
 
         // setup endpoint(switchable)
         this.endpoint = endpoint ? endpoint : new SwitchableDuplexEndpoint()
@@ -86,10 +103,12 @@ export class ControlledWritableStream<T> extends EventTarget2 {
             async close() {
                 if (interval) clearInterval(interval);
                 signal.close()
+                writer.close()
             },
             async abort(reason) {
                 if (interval) clearInterval(interval);
                 signal.abort(reason)
+                writer.abort(reason)
             },
         }, wrapQueuingStrategy(strategy))
 
@@ -125,4 +144,9 @@ function wrapQueuingStrategy<T>(strategy?: QueuingStrategy<T>) {
 function generatorify<T>(readable: ReadableStream<T>): ChunkGenerator<T> {
     const reader = readable.getReader()
     return (async () => { return await reader.read() })
+}
+
+function consumerify<T>(writable: WritableStream<T>): { consumer: ChunkConsumer<T>, writer: WritableStreamDefaultWriter<T> } {
+    const writer = writable.getWriter()
+    return { consumer: (async (chunk: T) => { return await writer.write(chunk) }), writer}
 }
