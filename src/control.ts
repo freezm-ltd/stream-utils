@@ -59,7 +59,6 @@ export class ControlledReadableStream<T> extends EventTarget2 {
 
         // pipeTo endpoint
         stream.pipeTo(this.endpoint.writable).then(() => this.dispatch("close"))
-        if (endpoint) this.endpoint.switch()
     }
 }
 
@@ -114,7 +113,6 @@ export class ControlledWritableStream<T> extends EventTarget2 {
 
         // pipeFrom endpoint
         this.endpoint.readable.pipeTo(stream).then(() => this.dispatch("close"))
-        if (endpoint) this.endpoint.switch()
     }
 }
 

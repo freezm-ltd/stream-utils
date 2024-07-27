@@ -581,7 +581,6 @@ var ControlledReadableStream = class extends EventTarget2 {
       }
     }, wrapQueuingStrategy(strategy));
     stream.pipeTo(this.endpoint.writable).then(() => this.dispatch("close"));
-    if (endpoint) this.endpoint.switch();
   }
 };
 var ControlledWritableStream = class extends EventTarget2 {
@@ -623,7 +622,6 @@ var ControlledWritableStream = class extends EventTarget2 {
       }
     }, wrapQueuingStrategy(strategy));
     this.endpoint.readable.pipeTo(stream).then(() => this.dispatch("close"));
-    if (endpoint) this.endpoint.switch();
   }
 };
 var ControlledStreamPair = class {
