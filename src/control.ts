@@ -86,6 +86,9 @@ export class ControlledWritableStream<T> extends EventTarget2 {
         let consumed = -1
         let interval: number
         const stream = new WritableStream({
+            start() {
+                signal.write(-1)
+            },
             async write(block) {
                 if (interval) clearInterval(interval);
                 if (block.id > consumed) { // consume only new block

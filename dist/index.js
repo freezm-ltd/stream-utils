@@ -597,6 +597,9 @@ var ControlledWritableStream = class extends EventTarget2 {
     let consumed = -1;
     let interval;
     const stream = new WritableStream({
+      start() {
+        signal.write(-1);
+      },
       async write(block) {
         if (interval) clearInterval(interval);
         if (block.id > consumed) {
