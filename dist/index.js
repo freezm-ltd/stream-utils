@@ -630,8 +630,15 @@ function wrapQueuingStrategy(strategy) {
   return void 0;
 }
 function generatorify(readable) {
-  const reader = readable.getReader();
-  return reader.read;
+  const generator = async function* _() {
+    for await (const chunk of readable) {
+      yield chunk;
+    }
+    return null;
+  }();
+  return async () => {
+    return await generator.next();
+  };
 }
 export {
   ControlledReadableStream,
