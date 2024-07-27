@@ -125,7 +125,7 @@
                         console.log(chunk)
                     }
                 })
-                mergeStream(4, gens).pipeTo(blackHole)
+                mergeStream(gens, {}, { parallel: 4 }).pipeTo(blackHole)
             },
             sliceByteStream: (total = 100, start = 42, end = 77) => {
                 const source = new ReadableStream({

@@ -1,5 +1,5 @@
 import { EventTarget2 } from "@freezm-ltd/event-target-2";
-import { StreamGenerator } from "./repipe";
+import { StreamGenerator, StreamGeneratorContext } from "./repipe";
 
 export type MergeOption = {
     parallel?: number
@@ -10,16 +10,16 @@ export type MergeOption = {
 
 // merge multiple streams, parallel loading and sequential piping
 // need to mind parallel option and strategy when stream's total size is unknown, can cause OOM
-export function mergeStream<T>(generators: Array<StreamGenerator<ReadableStream<T>>>, option: MergeOption) {
-    const { readable, writable } = new TransformStream<T, T>(undefined, option.writableStrategy, option.readableStrategy)
+export function mergeStream<T>(generators: Array<StreamGenerator<ReadableStream<T>>>, context?: StreamGeneratorContext, option?: MergeOption) {
+    const { readable, writable } = new TransformStream<T, T>(undefined, option?.writableStrategy, option?.readableStrategy)
     const emitter = new EventTarget2() // event emitter
     const buffer: Record<number, ReadableStream<T>> = {} // generated streams
-    const signal = option.signal
-    const parallel = option.parallel || 1
+    const signal = option?.signal
+    const parallel = option?.parallel || 1
     
     const load = async (index: number) => {
         if (index >= generators.length) return; // out of bound
-        buffer[index] = await generators[index]({ signal }) // load stream
+        buffer[index] = await generators[index](context, signal) // load stream
         emitter.dispatch("load", index) // call stream loaded
     }
 

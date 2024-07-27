@@ -1,12 +1,10 @@
 import { EventTarget2 } from "@freezm-ltd/event-target-2";
 import { PromiseLikeOrNot } from "./utils";
-export type StreamGenerator<T = ReadableStream | WritableStream> = (context: StreamGeneratorContext) => PromiseLikeOrNot<T>;
-export type StreamGeneratorContext = {
-    signal?: AbortSignal;
-} & any;
+export type StreamGenerator<T = ReadableStream | WritableStream> = (context?: StreamGeneratorContext, signal?: AbortSignal) => PromiseLikeOrNot<T>;
+export type StreamGeneratorContext = any;
 export declare abstract class AbstractSwitchableStream<T> extends EventTarget2 {
     readonly generator?: StreamGenerator | undefined;
-    readonly context: StreamGeneratorContext;
+    readonly context?: StreamGeneratorContext;
     readonly strategy?: QueuingStrategy<T> | undefined;
     abstract readonly stream: ReadableStream<T> | WritableStream<T>;
     protected controller: AbortController;
@@ -22,7 +20,7 @@ export declare abstract class AbstractSwitchableStream<T> extends EventTarget2 {
 }
 export declare class SwitchableReadableStream<T> extends AbstractSwitchableStream<T> {
     readonly generator?: StreamGenerator<ReadableStream<T>> | undefined;
-    readonly context: StreamGeneratorContext;
+    readonly context?: StreamGeneratorContext;
     readonly strategy?: QueuingStrategy<T> | undefined;
     readonly stream: ReadableStream<T>;
     protected readonly writable: WritableStream<T>;
@@ -34,7 +32,7 @@ export declare class SwitchableReadableStream<T> extends AbstractSwitchableStrea
 }
 export declare class SwitchableWritableStream<T> extends AbstractSwitchableStream<T> {
     readonly generator?: StreamGenerator<WritableStream<T>> | undefined;
-    readonly context: StreamGeneratorContext;
+    readonly context?: StreamGeneratorContext;
     readonly strategy?: QueuingStrategy<T> | undefined;
     readonly stream: WritableStream<T>;
     protected readonly readable: ReadableStream<T>;

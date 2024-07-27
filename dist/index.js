@@ -231,7 +231,7 @@ function mergeSignal(signal1, signal2) {
 // src/repipe.ts
 var AbstractSwitchableStream = class extends EventTarget2 {
   // to identify intended abort
-  constructor(generator, context = { signal: void 0 }, strategy) {
+  constructor(generator, context, strategy) {
     super();
     this.generator = generator;
     this.context = context;
@@ -251,11 +251,10 @@ var AbstractSwitchableStream = class extends EventTarget2 {
       this.isSwitching = true;
       this.controller.abort(this.abortReason);
       this.controller = new AbortController();
-      this.context.signal = this.controller.signal;
-      if (!to) to = await generator(this.context);
+      if (!to) to = await generator(this.context, this.controller.signal);
       const { readable, writable } = this.target(to);
       for (let i = 0; readable.locked || writable.locked; i += 10) await sleep(i);
-      readable.pipeTo(writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.context.signal }).then(() => {
+      readable.pipeTo(writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.controller.signal }).then(() => {
         writable.close().catch();
       }).catch((e) => {
         if (e !== this.abortReason) this.switch();
@@ -269,7 +268,7 @@ var AbstractSwitchableStream = class extends EventTarget2 {
   }
 };
 var SwitchableReadableStream = class extends AbstractSwitchableStream {
-  constructor(generator, context = { signal: void 0 }, strategy) {
+  constructor(generator, context, strategy) {
     super();
     this.generator = generator;
     this.context = context;
@@ -293,7 +292,7 @@ var SwitchableReadableStream = class extends AbstractSwitchableStream {
   }
 };
 var SwitchableWritableStream = class extends AbstractSwitchableStream {
-  constructor(generator, context = { signal: void 0 }, strategy) {
+  constructor(generator, context, strategy) {
     super();
     this.generator = generator;
     this.context = context;
@@ -394,15 +393,15 @@ function sliceByteStream(start, end) {
 }
 
 // src/merge.ts
-function mergeStream(generators, option) {
-  const { readable, writable } = new TransformStream(void 0, option.writableStrategy, option.readableStrategy);
+function mergeStream(generators, context, option) {
+  const { readable, writable } = new TransformStream(void 0, option?.writableStrategy, option?.readableStrategy);
   const emitter = new EventTarget2();
   const buffer = {};
-  const signal = option.signal;
-  const parallel = option.parallel || 1;
+  const signal = option?.signal;
+  const parallel = option?.parallel || 1;
   const load = async (index) => {
     if (index >= generators.length) return;
-    buffer[index] = await generators[index]({ signal });
+    buffer[index] = await generators[index](context, signal);
     emitter.dispatch("load", index);
   };
   emitter.listen("next", (e) => load(e.detail));
@@ -430,7 +429,7 @@ function mergeStream(generators, option) {
 }
 
 // src/retry.ts
-function retryableStream(context, readableGenerator, option, sensor) {
+function retryableStream(readableGenerator, context, option, sensor) {
   let _option = { slowDown: 5e3, minSpeed: 5120, minDuration: 1e4 };
   Object.assign(_option, option);
   option = _option;
@@ -456,7 +455,7 @@ function retryableFetchStream(input, init, option) {
       if (end) context.end = Number(end);
     }
   }
-  const readableGenerator = async (context2) => {
+  const readableGenerator = async (context2, signal) => {
     const { start, end } = context2;
     if (!init) init = {};
     if (start !== 0) {
@@ -469,7 +468,6 @@ function retryableFetchStream(input, init, option) {
         else init.headers.push(["Range", Range]);
       } else if (init.headers) init.headers["Range"] = Range;
     }
-    const signal = context2?.signal;
     init.signal = signal ? init.signal ? mergeSignal(init.signal, signal) : signal : init.signal;
     const response = await fetch(input, init);
     let stream = response.body;
@@ -482,7 +480,7 @@ function retryableFetchStream(input, init, option) {
     }));
     return stream;
   };
-  return retryableStream(context, readableGenerator, option);
+  return retryableStream(readableGenerator, context, option);
 }
 
 // src/duplex.ts

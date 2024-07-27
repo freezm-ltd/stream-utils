@@ -3,8 +3,8 @@
 import { EventTarget2 } from "@freezm-ltd/event-target-2"
 import { PromiseLikeOrNot, sleep } from "./utils"
 
-export type StreamGenerator<T = ReadableStream | WritableStream> = (context: StreamGeneratorContext) => PromiseLikeOrNot<T>
-export type StreamGeneratorContext = { signal?: AbortSignal } & any
+export type StreamGenerator<T = ReadableStream | WritableStream> = (context?: StreamGeneratorContext, signal?: AbortSignal) => PromiseLikeOrNot<T>
+export type StreamGeneratorContext = any
 
 export abstract class AbstractSwitchableStream<T> extends EventTarget2 {
     abstract readonly stream: ReadableStream<T> | WritableStream<T>
@@ -13,7 +13,7 @@ export abstract class AbstractSwitchableStream<T> extends EventTarget2 {
 
     constructor(
         readonly generator?: StreamGenerator,
-        readonly context: StreamGeneratorContext = { signal: undefined },
+        readonly context?: StreamGeneratorContext,
         readonly strategy?: QueuingStrategy<T>
     ) {
         super()
@@ -31,11 +31,10 @@ export abstract class AbstractSwitchableStream<T> extends EventTarget2 {
             this.isSwitching = true
             this.controller.abort(this.abortReason) // abort previous piping, wait for fully aborted
             this.controller = new AbortController()
-            this.context.signal = this.controller.signal // update abort signal
-            if (!to) to = await generator!(this.context); // get source
+            if (!to) to = await generator!(this.context, this.controller.signal); // get source
             const { readable, writable } = this.target(to)
             for (let i = 0; readable.locked || writable.locked; i += 10) await sleep(i); // wait for releaseLock
-            readable.pipeTo(writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.context.signal })
+            readable.pipeTo(writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.controller.signal })
                 .then(() => {
                     writable.close().catch() // silent catch
                 })
@@ -60,7 +59,7 @@ export class SwitchableReadableStream<T> extends AbstractSwitchableStream<T> {
 
     constructor(
         readonly generator?: StreamGenerator<ReadableStream<T>>,
-        readonly context: StreamGeneratorContext = { signal: undefined },
+        readonly context?: StreamGeneratorContext,
         readonly strategy?: QueuingStrategy<T>
     ) {
         super()
@@ -90,7 +89,7 @@ export class SwitchableWritableStream<T> extends AbstractSwitchableStream<T> {
 
     constructor(
         readonly generator?: StreamGenerator<WritableStream<T>>,
-        readonly context: StreamGeneratorContext = { signal: undefined },
+        readonly context?: StreamGeneratorContext,
         readonly strategy?: QueuingStrategy<T>
     ) {
         super()

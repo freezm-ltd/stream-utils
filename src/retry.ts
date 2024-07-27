@@ -12,7 +12,7 @@ export type RetryOption = {
 // switch <- trigger <- under minSpeed until minDuration
 //    |                               |
 // source -> SwitchableStream -> Flowmeter -> sink
-export function retryableStream<T>(context: StreamGeneratorContext, readableGenerator: StreamGenerator<ReadableStream<T>>, option?: RetryOption, sensor?: (chunk: T) => number) {
+export function retryableStream<T>(readableGenerator: StreamGenerator<ReadableStream<T>>, context: StreamGeneratorContext, option?: RetryOption, sensor?: (chunk: T) => number) {
     let _option = { slowDown: 5000, minSpeed: 5120, minDuration: 10000 }
     Object.assign(_option, option)
     option = _option
@@ -51,7 +51,7 @@ export function retryableFetchStream(input: RequestInfo | URL, init?: RequestIni
         }
     }
 
-    const readableGenerator = async (context: StreamGeneratorContext) => {
+    const readableGenerator = async (context: StreamGeneratorContext, signal?: AbortSignal) => {
         const { start, end } = context
         if (!init) init = {};
         if (start !== 0) { // retry with continuous range
@@ -66,7 +66,6 @@ export function retryableFetchStream(input: RequestInfo | URL, init?: RequestIni
             else if (init.headers) init.headers["Range"] = Range;
         }
 
-        const signal = context?.signal
         init.signal = signal ? (init.signal ? mergeSignal(init.signal, signal) : signal) : init.signal // set signal
 
         const response = await fetch(input, init)
@@ -80,5 +79,5 @@ export function retryableFetchStream(input: RequestInfo | URL, init?: RequestIni
         return stream
     }
 
-    return retryableStream(context, readableGenerator, option)
+    return retryableStream(readableGenerator, context, option)
 }
