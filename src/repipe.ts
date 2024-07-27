@@ -73,6 +73,7 @@ export class SwitchableReadableStream<T> extends AbstractSwitchableStream<T> {
         }, undefined, strategy)
         this.stream = pipe.readable
         this.writable = pipe.writable
+        if (generator) this.switch() // immediate starting
     }
 
     protected target(to: ReadableStream<T>) {
@@ -102,6 +103,7 @@ export class SwitchableWritableStream<T> extends AbstractSwitchableStream<T> {
         }, strategy)
         this.stream = pipe.writable
         this.readable = pipe.readable
+        if (generator) this.switch() // immediate starting
     }
 
     protected target(to: WritableStream<T>) {

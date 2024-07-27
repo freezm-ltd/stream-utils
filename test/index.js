@@ -283,6 +283,7 @@ var SwitchableReadableStream = class extends AbstractSwitchableStream {
     }, void 0, strategy);
     this.stream = pipe.readable;
     this.writable = pipe.writable;
+    if (generator) this.switch();
   }
   target(to) {
     return {
@@ -306,6 +307,7 @@ var SwitchableWritableStream = class extends AbstractSwitchableStream {
     }, strategy);
     this.stream = pipe.writable;
     this.readable = pipe.readable;
+    if (generator) this.switch();
   }
   target(to) {
     return {
