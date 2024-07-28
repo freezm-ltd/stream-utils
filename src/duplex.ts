@@ -1,18 +1,17 @@
-// endpoint1      endpoint2
-// A.writable -> A.readable
-
 import { EventTarget2 } from "@freezm-ltd/event-target-2"
 import { SwitchableReadableStream, SwitchableWritableStream } from "./repipe"
-import { PromiseLikeOrNot } from "./utils"
+import { PromiseLikeOrNot, sleep } from "./utils"
 
+// endpoint1      endpoint2
+// A.writable -> A.readable
 // B.readable <- B.writable
 export class Duplex<A = any, B = any> {
     readonly endpoint1: DuplexEndpoint<A, B>
     readonly endpoint2: DuplexEndpoint<B, A>
 
     constructor() {
-        const streamA = new TransformStream()
-        const streamB = new TransformStream()
+        const streamA = new TransformStream<A, A>()
+        const streamB = new TransformStream<B, B>()
         this.endpoint1 = new DuplexEndpoint(streamA.readable, streamB.writable)
         this.endpoint2 = new DuplexEndpoint(streamB.readable, streamA.writable)
     }
@@ -24,12 +23,12 @@ export type TransferableDuplexEndpoint<A = any, B = any> = {
     transfer: [ReadableStream<A>, WritableStream<B>]
 }
 
-export class DuplexEndpoint<A = any, B = any> {
+export class DuplexEndpoint<A = any, B = any> extends EventTarget2 {
     constructor(
         readonly readable: ReadableStream<A>,
         readonly writable: WritableStream<B>
     ) {
-
+        super()
     }
 
     // transfer duplex by postMessage
@@ -48,44 +47,28 @@ export class DuplexEndpoint<A = any, B = any> {
 }
 
 export class SwitchableDuplexEndpoint<A = any, B = any> extends DuplexEndpoint<A, B> {
-    readonly switchableReadable = new SwitchableReadableStream<A>()
-    readonly switchableWritable = new SwitchableWritableStream<B>()
+    readonly switchableReadable: SwitchableReadableStream<A>
+    readonly switchableWritable: SwitchableWritableStream<B>
 
     constructor(
-        readonly generator?: (context: any) => PromiseLikeOrNot<DuplexEndpoint<A, B>>, 
-        readonly context: any = {}
+        readonly generator?: (context?: any) => PromiseLikeOrNot<DuplexEndpoint<A, B>>,
+        readonly context?: any
     ) {
-        const switchEmitter = new EventTarget2()
-        if (generator) { // automatic switching
-            let readableRequired = false, writableRequired = false;
-            switchEmitter.listen<"readable" | "writable", void>("require", async (e) => {
-                if (e.detail === "readable") readableRequired = true;
-                if (e.detail === "writable") writableRequired = true;
-                if (readableRequired && writableRequired) {
-                    readableRequired = false; writableRequired = false;
-                    switchEmitter.dispatch("generate", await generator(context))
-                }
-            })
-        }
-        const switchableReadable = new SwitchableReadableStream<A>(generator ? async () => {
-            switchEmitter.dispatch("require", "readable")
-            return (await switchEmitter.waitFor<DuplexEndpoint<A, B>>("generate")).readable
-        } : undefined)
-        const switchableWritable = new SwitchableWritableStream<B>(generator ? async () => {
-            switchEmitter.dispatch("require", "writable")
-            return (await switchEmitter.waitFor<DuplexEndpoint<A, B>>("generate")).writable
-        } : undefined)
+        const switchableReadable = new SwitchableReadableStream<A>()
+        const switchableWritable = new SwitchableWritableStream<B>()
         super(switchableReadable.stream, switchableWritable.stream)
         this.switchableReadable = switchableReadable
         this.switchableWritable = switchableWritable
+        if (generator) this.switch();
     }
 
-    async switch(endpoint?: DuplexEndpoint<A, B>) {
-        if (this.generator) endpoint = await this.generator(this.context);
-        if (!endpoint) return;
-        await Promise.all([
-            this.switchableReadable.switch(endpoint.readable),
-            this.switchableWritable.switch(endpoint.writable)
-        ])
+    switch(endpoint?: DuplexEndpoint<A, B>) {
+        return this.atomic("switch", async () => {
+            if (!endpoint && this.generator) endpoint = await this.generator(this.context);
+            if (!endpoint) return;
+            const { readable, writable } = endpoint
+            await this.switchableWritable.switch(writable) // writable first switch(abort)
+            await this.switchableReadable.switch(readable) // sencondary
+        })
     }
 }

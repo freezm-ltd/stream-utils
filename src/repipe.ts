@@ -13,8 +13,7 @@ export abstract class AbstractSwitchableStream<T> extends EventTarget2 {
 
     constructor(
         readonly generator?: StreamGenerator,
-        readonly context?: StreamGeneratorContext,
-        readonly strategy?: QueuingStrategy<T>
+        readonly context?: StreamGeneratorContext
     ) {
         super()
     }
@@ -29,14 +28,14 @@ export abstract class AbstractSwitchableStream<T> extends EventTarget2 {
         }
         return this.atomic("switch", async () => {
             this.isSwitching = true
-            this.controller.abort(this.abortReason) // abort previous piping, wait for fully aborted
+            await this.abort() // abort previous piping, wait for fully aborted
             this.controller = new AbortController()
             if (!to) to = await generator!(this.context, this.controller.signal); // get source
             const { readable, writable } = this.target(to)
             for (let i = 0; readable.locked || writable.locked; i += 10) await sleep(i); // wait for releaseLock
             readable.pipeTo(writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.controller.signal })
                 .then(() => {
-                    writable.close().catch() // silent catch
+                    if (writable.locked) writable.close(); // close
                 })
                 .catch(e => {
                     if (e !== this.abortReason) this.switch() // automatic repipe except intended abort
@@ -46,32 +45,37 @@ export abstract class AbstractSwitchableStream<T> extends EventTarget2 {
         })
     }
 
-    abort() { // just abort and do not repipe
+    async abort() { // just abort and do not repipe
         this.controller.abort(this.abortReason)
+        for (let i = 0; this.locked; i += 10) {
+            await sleep(i); // wait for releaseLock
+        }
     }
 
     protected abstract target(to: ReadableStream | WritableStream): { readable: ReadableStream, writable: WritableStream }
+    protected abstract get locked(): boolean
 }
 
 export class SwitchableReadableStream<T> extends AbstractSwitchableStream<T> {
     readonly stream: ReadableStream<T>
-    protected readonly writable: WritableStream<T>
+    readonly writable: WritableStream<T>
 
     constructor(
         readonly generator?: StreamGenerator<ReadableStream<T>>,
-        readonly context?: StreamGeneratorContext,
-        readonly strategy?: QueuingStrategy<T>
+        readonly context?: StreamGeneratorContext
     ) {
         super()
         const _this = this
-        const pipe = new TransformStream<T, T>({
+        const { readable, writable } = new TransformStream<T, T>({
             async transform(chunk, controller) {
                 if (_this.isSwitching) await _this.waitFor("switch-done"); // wait for switching done
                 controller.enqueue(chunk)
             }
-        }, undefined, strategy)
-        this.stream = pipe.readable
-        this.writable = pipe.writable
+        })
+        this.stream = readable
+        const buffer = new TransformStream()
+        this.writable = buffer.writable
+        buffer.readable.pipeTo(writable)
         if (generator) this.switch() // immediate starting
     }
 
@@ -81,27 +85,30 @@ export class SwitchableReadableStream<T> extends AbstractSwitchableStream<T> {
             writable: this.writable,
         }
     }
+
+    get locked() {
+        return this.writable.locked
+    }
 }
 
 export class SwitchableWritableStream<T> extends AbstractSwitchableStream<T> {
     readonly stream: WritableStream<T>
-    protected readonly readable: ReadableStream<T>
+    readonly readable: ReadableStream<T>
 
     constructor(
         readonly generator?: StreamGenerator<WritableStream<T>>,
-        readonly context?: StreamGeneratorContext,
-        readonly strategy?: QueuingStrategy<T>
+        readonly context?: StreamGeneratorContext
     ) {
         super()
         const _this = this
-        const pipe = new TransformStream<T, T>({
+        const { readable, writable } = new TransformStream<T, T>({
             async transform(chunk, controller) {
                 if (_this.isSwitching) await _this.waitFor("switch-done");
                 controller.enqueue(chunk)
             }
-        }, strategy)
-        this.stream = pipe.writable
-        this.readable = pipe.readable
+        })
+        this.stream = writable
+        this.readable = readable
         if (generator) this.switch() // immediate starting
     }
 
@@ -110,5 +117,9 @@ export class SwitchableWritableStream<T> extends AbstractSwitchableStream<T> {
             readable: this.readable,
             writable: to,
         }
+    }
+
+    get locked() {
+        return this.readable.locked
     }
 }

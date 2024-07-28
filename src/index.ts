@@ -15,5 +15,5 @@ export {
     mergeStream,
     retryableStream, retryableFetchStream,
     Block, BlockId, ControlledReadableStream, ControlledWritableStream, ControlledStreamPair, ControlledReadableEndpoint, ControlledWritableEndpoint, ObjectifiedControlledReadableEndpoint, ObjectifiedControlledWritableEndpoint,
-    Duplex, DuplexEndpoint, SwitchableDuplexEndpoint, ObjectifiedDuplexEndpoint, TransferableDuplexEndpoint,
+    Duplex, DuplexEndpoint, SwitchableDuplexEndpoint, ObjectifiedDuplexEndpoint, TransferableDuplexEndpoint
 }

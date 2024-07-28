@@ -233,11 +233,10 @@ function noop(..._) {
 // src/repipe.ts
 var AbstractSwitchableStream = class extends EventTarget2 {
   // to identify intended abort
-  constructor(generator, context, strategy) {
+  constructor(generator, context) {
     super();
     this.generator = generator;
     this.context = context;
-    this.strategy = strategy;
     this.controller = new AbortController();
     this.abortReason = "SwitchableStreamAbortForSwitching";
     this.isSwitching = false;
@@ -251,13 +250,13 @@ var AbstractSwitchableStream = class extends EventTarget2 {
     }
     return this.atomic("switch", async () => {
       this.isSwitching = true;
-      this.controller.abort(this.abortReason);
+      await this.abort();
       this.controller = new AbortController();
       if (!to) to = await generator(this.context, this.controller.signal);
       const { readable, writable } = this.target(to);
       for (let i = 0; readable.locked || writable.locked; i += 10) await sleep(i);
       readable.pipeTo(writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.controller.signal }).then(() => {
-        writable.close().catch();
+        if (writable.locked) writable.close();
       }).catch((e) => {
         if (e !== this.abortReason) this.switch();
       });
@@ -265,25 +264,29 @@ var AbstractSwitchableStream = class extends EventTarget2 {
       this.dispatch("switch-done");
     });
   }
-  abort() {
+  async abort() {
     this.controller.abort(this.abortReason);
+    for (let i = 0; this.locked; i += 10) {
+      await sleep(i);
+    }
   }
 };
 var SwitchableReadableStream = class extends AbstractSwitchableStream {
-  constructor(generator, context, strategy) {
+  constructor(generator, context) {
     super();
     this.generator = generator;
     this.context = context;
-    this.strategy = strategy;
     const _this = this;
-    const pipe = new TransformStream({
+    const { readable, writable } = new TransformStream({
       async transform(chunk, controller) {
         if (_this.isSwitching) await _this.waitFor("switch-done");
         controller.enqueue(chunk);
       }
-    }, void 0, strategy);
-    this.stream = pipe.readable;
-    this.writable = pipe.writable;
+    });
+    this.stream = readable;
+    const buffer = new TransformStream();
+    this.writable = buffer.writable;
+    buffer.readable.pipeTo(writable);
     if (generator) this.switch();
   }
   target(to) {
@@ -292,22 +295,24 @@ var SwitchableReadableStream = class extends AbstractSwitchableStream {
       writable: this.writable
     };
   }
+  get locked() {
+    return this.writable.locked;
+  }
 };
 var SwitchableWritableStream = class extends AbstractSwitchableStream {
-  constructor(generator, context, strategy) {
+  constructor(generator, context) {
     super();
     this.generator = generator;
     this.context = context;
-    this.strategy = strategy;
     const _this = this;
-    const pipe = new TransformStream({
+    const { readable, writable } = new TransformStream({
       async transform(chunk, controller) {
         if (_this.isSwitching) await _this.waitFor("switch-done");
         controller.enqueue(chunk);
       }
-    }, strategy);
-    this.stream = pipe.writable;
-    this.readable = pipe.readable;
+    });
+    this.stream = writable;
+    this.readable = readable;
     if (generator) this.switch();
   }
   target(to) {
@@ -315,6 +320,9 @@ var SwitchableWritableStream = class extends AbstractSwitchableStream {
       readable: this.readable,
       writable: to
     };
+  }
+  get locked() {
+    return this.readable.locked;
   }
 };
 
@@ -494,8 +502,9 @@ var Duplex = class {
     this.endpoint2 = new DuplexEndpoint(streamB.readable, streamA.writable);
   }
 };
-var DuplexEndpoint = class _DuplexEndpoint {
+var DuplexEndpoint = class _DuplexEndpoint extends EventTarget2 {
   constructor(readable, writable) {
+    super();
     this.readable = readable;
     this.writable = writable;
   }
@@ -513,55 +522,39 @@ var DuplexEndpoint = class _DuplexEndpoint {
   }
 };
 var SwitchableDuplexEndpoint = class extends DuplexEndpoint {
-  constructor(generator, context = {}) {
-    const switchEmitter = new EventTarget2();
-    if (generator) {
-      let readableRequired = false, writableRequired = false;
-      switchEmitter.listen("require", async (e) => {
-        if (e.detail === "readable") readableRequired = true;
-        if (e.detail === "writable") writableRequired = true;
-        if (readableRequired && writableRequired) {
-          readableRequired = false;
-          writableRequired = false;
-          switchEmitter.dispatch("generate", await generator(context));
-        }
-      });
-    }
-    const switchableReadable = new SwitchableReadableStream(generator ? async () => {
-      switchEmitter.dispatch("require", "readable");
-      return (await switchEmitter.waitFor("generate")).readable;
-    } : void 0);
-    const switchableWritable = new SwitchableWritableStream(generator ? async () => {
-      switchEmitter.dispatch("require", "writable");
-      return (await switchEmitter.waitFor("generate")).writable;
-    } : void 0);
+  constructor(generator, context) {
+    const switchableReadable = new SwitchableReadableStream();
+    const switchableWritable = new SwitchableWritableStream();
     super(switchableReadable.stream, switchableWritable.stream);
     this.generator = generator;
     this.context = context;
-    this.switchableReadable = new SwitchableReadableStream();
-    this.switchableWritable = new SwitchableWritableStream();
     this.switchableReadable = switchableReadable;
     this.switchableWritable = switchableWritable;
+    if (generator) this.switch();
   }
-  async switch(endpoint) {
-    if (this.generator) endpoint = await this.generator(this.context);
-    if (!endpoint) return;
-    await Promise.all([
-      this.switchableReadable.switch(endpoint.readable),
-      this.switchableWritable.switch(endpoint.writable)
-    ]);
+  switch(endpoint) {
+    return this.atomic("switch", async () => {
+      if (!endpoint && this.generator) endpoint = await this.generator(this.context);
+      if (!endpoint) return;
+      const { readable, writable } = endpoint;
+      await this.switchableWritable.switch(writable);
+      await this.switchableReadable.switch(readable);
+    });
   }
 };
 
 // src/control.ts
+var SWITCH_DUPLEX_ENDPOINT_TIMEOUT = 1e3;
 var ControlledReadableStream = class extends EventTarget2 {
   constructor(generator, endpoint, strategy, chunkCallback2) {
     super();
     if (generator instanceof ReadableStream) generator = generatorify(generator);
     this.endpoint = endpoint ? endpoint : new SwitchableDuplexEndpoint();
+    const switchEndpoint = () => this.endpoint.switch();
     const signal = this.endpoint.readable.getReader();
     let enqueued = 0;
     let consumed = -1;
+    let interval = void 0;
     const stream = new ReadableStream({
       async pull(controller) {
         const { value, done } = await generator();
@@ -571,7 +564,9 @@ var ControlledReadableStream = class extends EventTarget2 {
           const block = { id: enqueued, chunk: value };
           while (consumed < enqueued) {
             controller.enqueue(block);
+            interval = globalThis.setInterval(switchEndpoint, SWITCH_DUPLEX_ENDPOINT_TIMEOUT);
             const result = await signal.read();
+            clearInterval(interval);
             if (result.done) return;
             consumed = result.value;
           }

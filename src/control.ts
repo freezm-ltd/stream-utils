@@ -18,7 +18,7 @@ export type ObjectifiedControlledWritableEndpoint<T> = ObjectifiedDuplexEndpoint
             <---       pull          <---         BlockId        <---          signal          <---
 */
 
-
+const SWITCH_DUPLEX_ENDPOINT_TIMEOUT = 1000
 export class ControlledReadableStream<T> extends EventTarget2 {
     readonly endpoint: ControlledReadableEndpoint<T>
     constructor(
@@ -33,11 +33,13 @@ export class ControlledReadableStream<T> extends EventTarget2 {
 
         // setup endpoint(switchable)
         this.endpoint = endpoint ? endpoint : new SwitchableDuplexEndpoint()
+        const switchEndpoint = () => this.endpoint.switch()
         const signal = this.endpoint.readable.getReader()
 
         // setup blockStream
         let enqueued = 0
         let consumed = -1
+        let interval: number | undefined = undefined
         const stream = new ReadableStream({
             async pull(controller) {
                 const { value, done } = await generator()
@@ -47,7 +49,9 @@ export class ControlledReadableStream<T> extends EventTarget2 {
                     const block = { id: enqueued, chunk: value }
                     while (consumed < enqueued) { // continuously enqueue and wait for consume current chunk
                         controller.enqueue(block)
+                        interval = (globalThis as WindowOrWorkerGlobalScope).setInterval(switchEndpoint, SWITCH_DUPLEX_ENDPOINT_TIMEOUT);
                         const result = await signal.read()
+                        clearInterval(interval)
                         if (result.done) return; // end
                         consumed = result.value // consumed
                     }
@@ -114,7 +118,7 @@ export class ControlledWritableStream<T> extends EventTarget2 {
             },
         }, wrapQueuingStrategy(strategy))
 
-        // pipeFrom endpoint
+        // pipeFrom endpoint, with buffer
         this.endpoint.readable.pipeTo(stream).then(() => this.dispatch("close"))
     }
 }

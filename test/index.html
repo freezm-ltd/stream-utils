@@ -45,13 +45,13 @@
                     await sleep(stdms * Math.random() * 10)
                 }
             },
-            controlledStream: async (num = 100, stdms = 20) => {
+            controlledStream: async (num = 1000, stdms = 20) => {
                 let id = -1
                 const gen = async () => {
                     const ms = stdms * Math.random()
                     await sleep(ms)
                     id++
-                    if (id < num) {
+                    if (id <= num) {
                         console.log(`send:${id}`, `sleeped:${ms}`)
                         return { value: `recv:${id}`, done: false };
                     }
@@ -63,31 +63,14 @@
                     console.log(data, `sleeped:${ms}`)
                 }
                 
-                const { endpoint1, endpoint2 } = new Duplex()
-                const readable = new ControlledReadableStream(gen, new SwitchableDuplexEndpoint(() => {
-                    console.log("readable: switch init")
-                    return endpoint1
-                }))
-                const writable = new ControlledWritableStream(con, new SwitchableDuplexEndpoint(() => {
-                    console.log("writable: switch init")
-                    return endpoint2
-                }))
+                const { readable, writable } = new ControlledStreamPair(gen, con)
                 let reconnect = 0
-                while (Math.round(num / 5) > reconnect) {
+                while (Math.round(num / 10) > reconnect) {
                     reconnect++
                     console.log("reconnect:", reconnect)
                     const { endpoint1, endpoint2 } = new Duplex()
-                    await Promise.all([
-                        (async () => {
-                            await sleep(Math.random() * stdms)
-                            await readable.endpoint.switch(endpoint1)
-                        })(),
-                        (async () => {
-                            await sleep(Math.random() * stdms)
-                            await writable.endpoint.switch(endpoint2)
-                        })()
-                    ])
-                    await sleep(stdms * Math.random() * 5)
+                    await Promise.all([readable.endpoint.switch(endpoint1), writable.endpoint.switch(endpoint2)])
+                    await sleep(stdms * Math.random() * 10)
                 }
             },
             retryableFetchStream: async (url) => {
