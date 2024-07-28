@@ -548,7 +548,10 @@ var SwitchableDuplexEndpoint = class extends DuplexEndpoint {
 };
 
 // src/control.ts
-var SWITCH_DUPLEX_ENDPOINT_TIMEOUT = 3e3;
+var SWITCH_DUPLEX_ENDPOINT_TIMEOUT = 1e3;
+function setUpdateControlledEndpointTimeout(ms) {
+  SWITCH_DUPLEX_ENDPOINT_TIMEOUT = ms;
+}
 var ControlledReadableStream = class extends EventTarget2 {
   constructor(generator, endpoint, strategy, chunkCallback2) {
     super();
@@ -672,6 +675,7 @@ export {
   mergeStream,
   retryableFetchStream,
   retryableStream,
+  setUpdateControlledEndpointTimeout,
   sliceByteStream,
   sliceStream
 };

@@ -18,7 +18,12 @@ export type ObjectifiedControlledWritableEndpoint<T> = ObjectifiedDuplexEndpoint
             <---       pull          <---         BlockId        <---          signal          <---
 */
 
-const SWITCH_DUPLEX_ENDPOINT_TIMEOUT = 3000 // 3s
+let SWITCH_DUPLEX_ENDPOINT_TIMEOUT = 1000 // 1s
+
+export function setUpdateControlledEndpointTimeout(ms: number) {
+    SWITCH_DUPLEX_ENDPOINT_TIMEOUT = ms
+}
+
 export class ControlledReadableStream<T> extends EventTarget2 {
     readonly endpoint: ControlledReadableEndpoint<T>
     constructor(

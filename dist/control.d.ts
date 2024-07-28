@@ -12,6 +12,7 @@ export type ControlledReadableEndpoint<T> = SwitchableDuplexEndpoint<BlockId, Bl
 export type ObjectifiedControlledReadableEndpoint<T> = ObjectifiedDuplexEndpoint<BlockId, Block<T>>;
 export type ControlledWritableEndpoint<T> = SwitchableDuplexEndpoint<Block<T>, BlockId>;
 export type ObjectifiedControlledWritableEndpoint<T> = ObjectifiedDuplexEndpoint<Block<T>, BlockId>;
+export declare function setUpdateControlledEndpointTimeout(ms: number): void;
 export declare class ControlledReadableStream<T> extends EventTarget2 {
     readonly endpoint: ControlledReadableEndpoint<T>;
     constructor(generator: ReadableStream<T> | ChunkGenerator<T>, endpoint?: ControlledReadableEndpoint<T>, strategy?: QueuingStrategy<T>, chunkCallback?: (chunk: T) => any);
