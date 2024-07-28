@@ -532,17 +532,21 @@ var SwitchableDuplexEndpoint = class extends DuplexEndpoint {
     super(switchableReadable.stream, switchableWritable.stream);
     this.generator = generator;
     this.context = context;
+    this.isSwitching = false;
     this.switchableReadable = switchableReadable;
     this.switchableWritable = switchableWritable;
     if (generator) this.switch();
   }
   switch(endpoint) {
+    if (!endpoint && this.isSwitching) return;
     return this.atomic("switch", async () => {
+      this.isSwitching = true;
       if (!endpoint && this.generator) endpoint = await this.generator(this.context);
       if (!endpoint) return;
       const { readable, writable } = endpoint;
       await this.switchableWritable.switch(writable);
       await this.switchableReadable.switch(readable);
+      this.isSwitching = false;
     });
   }
 };

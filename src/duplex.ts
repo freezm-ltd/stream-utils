@@ -62,13 +62,17 @@ export class SwitchableDuplexEndpoint<A = any, B = any> extends DuplexEndpoint<A
         if (generator) this.switch();
     }
 
+    protected isSwitching = false
     switch(endpoint?: DuplexEndpoint<A, B>) {
+        if (!endpoint && this.isSwitching) return;
         return this.atomic("switch", async () => {
+            this.isSwitching = true
             if (!endpoint && this.generator) endpoint = await this.generator(this.context);
             if (!endpoint) return;
             const { readable, writable } = endpoint
             await this.switchableWritable.switch(writable) // writable first switch(abort)
             await this.switchableReadable.switch(readable) // sencondary
+            this.isSwitching = false
         })
     }
 }
