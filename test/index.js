@@ -253,7 +253,7 @@ var AbstractSwitchableStream = class extends EventTarget2 {
       await this.abort();
       this.controller = new AbortController();
       if (!to) to = await generator(this.context, this.controller.signal);
-      const { readable, writable } = this.target(to);
+      const { readable, writable } = this.target(to, this.controller.signal);
       for (let i = 0; readable.locked || writable.locked; i += 10) await sleep(i);
       readable.pipeTo(writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.controller.signal }).then(() => {
         if (writable.locked) writable.close();
@@ -289,10 +289,12 @@ var SwitchableReadableStream = class extends AbstractSwitchableStream {
     buffer.readable.pipeTo(writable);
     if (generator) this.switch();
   }
-  target(to) {
+  target(to, signal) {
+    const { readable, writable } = new TransformStream();
+    readable.pipeTo(this.writable, { preventAbort: true, signal }).catch(noop);
     return {
       readable: to,
-      writable: this.writable
+      writable
     };
   }
   get locked() {

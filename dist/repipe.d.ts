@@ -12,7 +12,7 @@ export declare abstract class AbstractSwitchableStream<T> extends EventTarget2 {
     protected isSwitching: boolean;
     switch(to?: ReadableStream | WritableStream): Promise<unknown> | undefined;
     abort(): Promise<void>;
-    protected abstract target(to: ReadableStream | WritableStream): {
+    protected abstract target(to: ReadableStream | WritableStream, signal?: AbortSignal): {
         readable: ReadableStream;
         writable: WritableStream;
     };
@@ -24,9 +24,9 @@ export declare class SwitchableReadableStream<T> extends AbstractSwitchableStrea
     readonly stream: ReadableStream<T>;
     readonly writable: WritableStream<T>;
     constructor(generator?: StreamGenerator<ReadableStream<T>> | undefined, context?: StreamGeneratorContext);
-    protected target(to: ReadableStream<T>): {
+    protected target(to: ReadableStream<T>, signal?: AbortSignal): {
         readable: ReadableStream<T>;
-        writable: WritableStream<T>;
+        writable: WritableStream<any>;
     };
     get locked(): boolean;
 }

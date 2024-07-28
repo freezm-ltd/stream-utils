@@ -1,7 +1,7 @@
 // Bring back Readable/WritableStream and re-pipe each other, when they are broken or other event emitted
 
 import { EventTarget2 } from "@freezm-ltd/event-target-2"
-import { PromiseLikeOrNot, sleep } from "./utils"
+import { noop, PromiseLikeOrNot, sleep } from "./utils"
 
 export type StreamGenerator<T = ReadableStream | WritableStream> = (context?: StreamGeneratorContext, signal?: AbortSignal) => PromiseLikeOrNot<T>
 export type StreamGeneratorContext = any
@@ -31,7 +31,7 @@ export abstract class AbstractSwitchableStream<T> extends EventTarget2 {
             await this.abort() // abort previous piping, wait for fully aborted
             this.controller = new AbortController()
             if (!to) to = await generator!(this.context, this.controller.signal); // get source
-            const { readable, writable } = this.target(to)
+            const { readable, writable } = this.target(to, this.controller.signal)
             for (let i = 0; readable.locked || writable.locked; i += 10) await sleep(i); // wait for releaseLock
             readable.pipeTo(writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.controller.signal })
                 .then(() => {
@@ -52,7 +52,7 @@ export abstract class AbstractSwitchableStream<T> extends EventTarget2 {
         }
     }
 
-    protected abstract target(to: ReadableStream | WritableStream): { readable: ReadableStream, writable: WritableStream }
+    protected abstract target(to: ReadableStream | WritableStream, signal?: AbortSignal): { readable: ReadableStream, writable: WritableStream }
     protected abstract get locked(): boolean
 }
 
@@ -79,10 +79,12 @@ export class SwitchableReadableStream<T> extends AbstractSwitchableStream<T> {
         if (generator) this.switch() // immediate starting
     }
 
-    protected target(to: ReadableStream<T>) {
+    protected target(to: ReadableStream<T>, signal?: AbortSignal) {
+        const { readable, writable } = new TransformStream()
+        readable.pipeTo(this.writable, { preventAbort: true, signal }).catch(noop)
         return {
             readable: to,
-            writable: this.writable,
+            writable,
         }
     }
 
