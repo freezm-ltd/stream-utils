@@ -36,8 +36,8 @@ export declare class SwitchableWritableStream<T> extends AbstractSwitchableStrea
     readonly stream: WritableStream<T>;
     readonly readable: ReadableStream<T>;
     constructor(generator?: StreamGenerator<WritableStream<T>> | undefined, context?: StreamGeneratorContext);
-    protected target(to: WritableStream<T>): {
-        readable: ReadableStream<T>;
+    protected target(to: WritableStream<T>, signal?: AbortSignal): {
+        readable: ReadableStream<any>;
         writable: WritableStream<T>;
     };
     get locked(): boolean;

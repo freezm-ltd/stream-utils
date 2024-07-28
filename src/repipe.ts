@@ -81,7 +81,7 @@ export class SwitchableReadableStream<T> extends AbstractSwitchableStream<T> {
 
     protected target(to: ReadableStream<T>, signal?: AbortSignal) {
         const { readable, writable } = new TransformStream()
-        readable.pipeTo(this.writable, { preventAbort: true, signal }).catch(noop)
+        readable.pipeTo(this.writable, { preventCancel: true, preventAbort: true, signal }).catch(noop)
         return {
             readable: to,
             writable,
@@ -114,9 +114,11 @@ export class SwitchableWritableStream<T> extends AbstractSwitchableStream<T> {
         if (generator) this.switch() // immediate starting
     }
 
-    protected target(to: WritableStream<T>) {
+    protected target(to: WritableStream<T>, signal?: AbortSignal) {
+        const { readable, writable } = new TransformStream()
+        this.readable.pipeTo(writable, { preventCancel: true, preventAbort: true, signal }).catch(noop)
         return {
-            readable: this.readable,
+            readable: readable,
             writable: to,
         }
     }

@@ -291,7 +291,7 @@ var SwitchableReadableStream = class extends AbstractSwitchableStream {
   }
   target(to, signal) {
     const { readable, writable } = new TransformStream();
-    readable.pipeTo(this.writable, { preventAbort: true, signal }).catch(noop);
+    readable.pipeTo(this.writable, { preventCancel: true, preventAbort: true, signal }).catch(noop);
     return {
       readable: to,
       writable
@@ -317,9 +317,11 @@ var SwitchableWritableStream = class extends AbstractSwitchableStream {
     this.readable = readable;
     if (generator) this.switch();
   }
-  target(to) {
+  target(to, signal) {
+    const { readable, writable } = new TransformStream();
+    this.readable.pipeTo(writable, { preventCancel: true, preventAbort: true, signal }).catch(noop);
     return {
-      readable: this.readable,
+      readable,
       writable: to
     };
   }
@@ -546,7 +548,7 @@ var SwitchableDuplexEndpoint = class extends DuplexEndpoint {
 };
 
 // src/control.ts
-var SWITCH_DUPLEX_ENDPOINT_TIMEOUT = 1e3;
+var SWITCH_DUPLEX_ENDPOINT_TIMEOUT = 3e3;
 var ControlledReadableStream = class extends EventTarget2 {
   constructor(generator, endpoint, strategy, chunkCallback2) {
     super();
