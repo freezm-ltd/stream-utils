@@ -150,7 +150,7 @@ var Flowmeter = class extends EventTarget2 {
   // custom trigger depends on flow info
   // callback if trigger===true duration overs triggerDuration
   // if trigger fired, other triggers skipped while slowDown
-  addTrigger(trigger, callback, triggerDuration = 1e4, slowDown = 5e3) {
+  addTrigger(trigger, callback, triggerDuration = 1e3, slowDown = 0) {
     if (this.listenerWeakMap.has(trigger)) throw new Error("FlowmeterAddTriggerError: Duplication of trigger is not allowed");
     let timeout = null;
     let skip = false;
@@ -444,7 +444,7 @@ function mergeStream(generators, context, option) {
 
 // src/retry.ts
 function retryableStream(readableGenerator, context, option, sensor) {
-  let _option = { slowDown: 5e3, minSpeed: 5120, minDuration: 1e4 };
+  let _option = { slowDown: 0, minSpeed: 0, minDuration: 1e3 };
   Object.assign(_option, option);
   option = _option;
   if (!sensor) sensor = (any) => any.length;
@@ -456,6 +456,9 @@ function retryableStream(readableGenerator, context, option, sensor) {
   return readable;
 }
 function retryableFetchStream(input, init, option) {
+  let _option = { slowDown: 5e3, minSpeed: 5120, minDuration: 1e4 };
+  Object.assign(_option, option);
+  option = _option;
   const context = { start: 0, end: 0 };
   if (init && init.headers) {
     const headers = init.headers;

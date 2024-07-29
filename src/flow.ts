@@ -52,7 +52,7 @@ export class Flowmeter<T> extends EventTarget2 {
     // custom trigger depends on flow info
     // callback if trigger===true duration overs triggerDuration
     // if trigger fired, other triggers skipped while slowDown
-    addTrigger(trigger: FlowTrigger, callback: () => any, triggerDuration: number = 10_000, slowDown: number = 5_000) {
+    addTrigger(trigger: FlowTrigger, callback: () => any, triggerDuration: number = 1_000, slowDown: number = 0) {
         if (this.listenerWeakMap.has(trigger)) throw new Error("FlowmeterAddTriggerError: Duplication of trigger is not allowed");
         let timeout: number | null = null
         let skip = false
