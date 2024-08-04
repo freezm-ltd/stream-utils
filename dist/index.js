@@ -344,6 +344,55 @@ function fitStream(size, fitter) {
     }
   });
 }
+function fitMetaStream(size, measurer, slicer) {
+  const transform = new TransformStream();
+  const tReadable = transform.readable;
+  const tWriter = transform.writable.getWriter();
+  const buffer = [];
+  let written = 0;
+  let writer;
+  const readable = new ReadableStream({
+    async start(controller) {
+      for await (const chunk of tReadable) {
+        buffer.push(chunk);
+        while (buffer.length > 0) {
+          if (!writer) {
+            const stream = new TransformStream();
+            writer = stream.writable.getWriter();
+            controller.enqueue(stream.readable);
+          }
+          const chunk2 = buffer.pop();
+          const total = measurer(chunk2);
+          const need = size - written;
+          if (total > need) {
+            await writer.write(slicer(chunk2, 0, need));
+            await writer.close();
+            written = 0;
+            writer = void 0;
+            buffer.push(slicer(chunk2, need, total));
+          } else {
+            await writer.write(chunk2);
+            written += total;
+          }
+        }
+      }
+      if (writer) await writer.close();
+      controller.close();
+    }
+  });
+  const writable = new WritableStream({
+    write(chunk) {
+      tWriter.write(chunk);
+    },
+    close() {
+      tWriter.close();
+    }
+  });
+  return { readable, writable };
+}
+function fitMetaByteStream(size) {
+  return fitMetaStream(size, (chunk) => chunk.length, (chunk, start, end) => chunk.slice(start, end));
+}
 function getFitter(measurer, splicer, slicer) {
   return (size, chunks) => {
     const result = [];
@@ -676,6 +725,8 @@ export {
   SwitchableWritableStream,
   byteFitter,
   chunkCallback,
+  fitMetaByteStream,
+  fitMetaStream,
   fitStream,
   getFitter,
   lengthCallback,

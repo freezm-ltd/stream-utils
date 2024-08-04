@@ -9,7 +9,7 @@
 
 <body>
     <script type="module">
-        import { retryableFetchStream, mergeStream, sliceByteStream, ControlledStreamPair, ControlledReadableStream, ControlledWritableStream, Duplex, SwitchableReadableStream, SwitchableDuplexEndpoint } from "./index.js"
+        import { retryableFetchStream, mergeStream, sliceByteStream, fitMetaByteStream, ControlledStreamPair, ControlledReadableStream, ControlledWritableStream, Duplex, SwitchableReadableStream, SwitchableDuplexEndpoint } from "./index.js"
 
         function sleep(ms) {
             return new Promise((resolve) => setTimeout(resolve, ms));
@@ -62,7 +62,7 @@
                     await sleep(ms)
                     console.log(data, `sleeped:${ms}`)
                 }
-                
+
                 const { readable, writable } = new ControlledStreamPair(gen, con)
                 let reconnect = 0
                 while (Math.round(num / 10) > reconnect) {
@@ -139,6 +139,38 @@
                     }
                 })
                 source.pipeThrough(sliceByteStream(start, end)).pipeTo(logger)
+            },
+            fitMetaByteStream: (total = 100, size = 10) => {
+                const source = new ReadableStream({
+                    start(controller) {
+                        this.index = 0
+                    },
+                    async pull(controller) {
+                        //await sleep(25)
+                        const length = Math.min(Math.random() * 10, total - this.index)
+                        const arr = Array.from({ length }, (_, i) => i + this.index)
+                        this.index += arr.length
+                        console.log("enqueue:", arr)
+                        controller.enqueue(arr)
+                        if (this.index >= total) controller.close();
+                    }
+                })
+                const logger = new WritableStream({
+                    write(stream) {
+                        stream.pipeTo(new WritableStream({
+                            start() {
+                                console.log("start")
+                            },
+                            write(chunk) {
+                                console.log("receive", chunk)
+                            },
+                            close() {
+                                console.log("close")
+                            }
+                        }))
+                    }
+                })
+                source.pipeThrough(fitMetaByteStream(size)).pipeTo(logger)
             }
         }
     </script>

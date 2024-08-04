@@ -1,6 +1,6 @@
 import { Flowmeter, chunkCallback, lengthCallback } from "./flow"
 import { SwitchableReadableStream, SwitchableWritableStream } from "./repipe"
-import { fitStream, getFitter, byteFitter } from "./fit"
+import { fitStream, getFitter, byteFitter, fitMetaStream, fitMetaByteStream } from "./fit"
 import { sliceStream, sliceByteStream } from "./slice"
 import { mergeStream } from "./merge"
 import { retryableStream, retryableFetchStream } from "./retry"
@@ -10,7 +10,7 @@ import { Duplex, DuplexEndpoint, SwitchableDuplexEndpoint, ObjectifiedDuplexEndp
 export {
     Flowmeter, chunkCallback, lengthCallback,
     SwitchableReadableStream, SwitchableWritableStream,
-    fitStream, getFitter, byteFitter,
+    fitStream, getFitter, byteFitter, fitMetaStream, fitMetaByteStream,
     sliceStream, sliceByteStream,
     mergeStream,
     retryableStream, retryableFetchStream,
