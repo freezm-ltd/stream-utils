@@ -29,13 +29,11 @@ export function mergeStream<T>(generators: Array<StreamGenerator<ReadableStream<
         let index = 0
         while (index < generators.length) {
             if (!buffer[index]) await emitter.waitFor("load", index); // wait for load
-            try {
-                await buffer[index].pipeTo(writable, { preventClose: true })
-            } catch (e) {
+            await buffer[index].pipeTo(writable, { preventClose: true }).catch(e => {
                 // error occurred, cancel all
                 Object.values(buffer).forEach(stream => stream.cancel(e).catch(/* silent catch */))
-                throw e // forward error
-            }
+                console.log("mergeStream error:", e)
+            })
             emitter.dispatch("next", index + parallel) // load request
             index++
         }
