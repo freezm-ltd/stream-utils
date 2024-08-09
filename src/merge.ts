@@ -40,7 +40,7 @@ export function mergeStream<T>(generators: Array<StreamGenerator<ReadableStream<
             emitter.dispatch("next", index + parallel) // load request
             index++
         }
-        await writable.close()
+        writable.close().catch(/* silent catch */)
         emitter.destroy()
     }
     task()

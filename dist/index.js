@@ -493,7 +493,9 @@ function mergeStream(generators, context, option) {
       emitter.dispatch("next", index + parallel);
       index++;
     }
-    await writable.close();
+    writable.close().catch(
+      /* silent catch */
+    );
     emitter.destroy();
   };
   task();
