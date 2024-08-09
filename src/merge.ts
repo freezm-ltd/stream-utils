@@ -32,7 +32,7 @@ export function mergeStream<T>(generators: Array<StreamGenerator<ReadableStream<
             let errored = false
             await buffer[index].pipeTo(writable, { preventClose: true }).catch(e => {
                 // error occurred, cancel all
-                Object.values(buffer).forEach(stream => stream.cancel(e).catch(/* silent catch */))
+                Object.values(buffer).forEach(stream => stream.cancel(e).catch(() => {/* silent catch */}))
                 console.debug("mergeStream error:", e)
                 errored = true
             })
@@ -40,7 +40,7 @@ export function mergeStream<T>(generators: Array<StreamGenerator<ReadableStream<
             emitter.dispatch("next", index + parallel) // load request
             index++
         }
-        writable.close().catch(/* silent catch */)
+        writable.close().catch(() => {/* silent catch */})
         emitter.destroy()
     }
     task()

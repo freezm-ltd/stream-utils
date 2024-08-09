@@ -483,9 +483,8 @@ function mergeStream(generators, context, option) {
       if (!buffer[index]) await emitter.waitFor("load", index);
       let errored = false;
       await buffer[index].pipeTo(writable, { preventClose: true }).catch((e) => {
-        Object.values(buffer).forEach((stream) => stream.cancel(e).catch(
-          /* silent catch */
-        ));
+        Object.values(buffer).forEach((stream) => stream.cancel(e).catch(() => {
+        }));
         console.debug("mergeStream error:", e);
         errored = true;
       });
@@ -493,9 +492,8 @@ function mergeStream(generators, context, option) {
       emitter.dispatch("next", index + parallel);
       index++;
     }
-    writable.close().catch(
-      /* silent catch */
-    );
+    writable.close().catch(() => {
+    });
     emitter.destroy();
   };
   task();
