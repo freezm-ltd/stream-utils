@@ -481,12 +481,15 @@ function mergeStream(generators, context, option) {
     let index = 0;
     while (index < generators.length) {
       if (!buffer[index]) await emitter.waitFor("load", index);
+      let errored = false;
       await buffer[index].pipeTo(writable, { preventClose: true }).catch((e) => {
         Object.values(buffer).forEach((stream) => stream.cancel(e).catch(
           /* silent catch */
         ));
-        console.log("mergeStream error:", e);
+        console.debug("mergeStream error:", e);
+        errored = true;
       });
+      if (errored) break;
       emitter.dispatch("next", index + parallel);
       index++;
     }
