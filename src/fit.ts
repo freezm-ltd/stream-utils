@@ -21,6 +21,7 @@ export function fitMetaStream<T>(size: number, measurer: ChunkMeasurer<T>, slice
     const transform = new TransformStream<T, T>()
     const tReadable = transform.readable
     const tWriter = transform.writable.getWriter()
+    let tWriterClosed: string | undefined = undefined
     const buffer: Array<T> = []
     let written = 0
     let writer: WritableStreamDefaultWriter<T> | undefined
@@ -51,10 +52,15 @@ export function fitMetaStream<T>(size: number, measurer: ChunkMeasurer<T>, slice
             }
             if (writer) await writer.close();
             controller.close();
-        }
+        },
+        cancel(reason) {
+            writer?.close()
+            tWriterClosed = String(reason)
+        },
     })
     const writable = new WritableStream<T>({
-        write(chunk) {
+        write(chunk, controller) {
+            if (tWriterClosed) return controller.error(tWriterClosed);
             tWriter.write(chunk)
         },
         close() {

@@ -348,6 +348,7 @@ function fitMetaStream(size, measurer, slicer) {
   const transform = new TransformStream();
   const tReadable = transform.readable;
   const tWriter = transform.writable.getWriter();
+  let tWriterClosed = void 0;
   const buffer = [];
   let written = 0;
   let writer;
@@ -378,10 +379,15 @@ function fitMetaStream(size, measurer, slicer) {
       }
       if (writer) await writer.close();
       controller.close();
+    },
+    cancel(reason) {
+      writer?.close();
+      tWriterClosed = String(reason);
     }
   });
   const writable = new WritableStream({
-    write(chunk) {
+    write(chunk, controller) {
+      if (tWriterClosed) return controller.error(tWriterClosed);
       tWriter.write(chunk);
     },
     close() {
