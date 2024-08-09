@@ -59,6 +59,9 @@ export function fitMetaStream<T>(size: number, measurer: ChunkMeasurer<T>, slice
         },
         close() {
             tWriter.close()
+        },
+        abort(reason) {
+            tWriter.abort(reason)
         }
     })
     return { readable, writable }

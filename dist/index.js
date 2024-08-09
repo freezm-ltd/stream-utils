@@ -386,6 +386,9 @@ function fitMetaStream(size, measurer, slicer) {
     },
     close() {
       tWriter.close();
+    },
+    abort(reason) {
+      tWriter.abort(reason);
     }
   });
   return { readable, writable };
