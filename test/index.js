@@ -256,7 +256,7 @@ var AbstractSwitchableStream = class extends EventTarget2 {
       const { readable, writable } = this.target(to, this.controller.signal);
       for (let i = 0; readable.locked || writable.locked; i += 10) await sleep(i);
       readable.pipeTo(writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.controller.signal }).then(() => {
-        if (writable.locked) writable.close();
+        writable.close();
       }).catch((e) => {
         if (e !== this.abortReason) this.switch();
       });

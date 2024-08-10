@@ -35,7 +35,7 @@ export abstract class AbstractSwitchableStream<T> extends EventTarget2 {
             for (let i = 0; readable.locked || writable.locked; i += 10) await sleep(i); // wait for releaseLock
             readable.pipeTo(writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.controller.signal })
                 .then(() => {
-                    if (writable.locked) writable.close(); // close
+                    writable.close(); // close
                 })
                 .catch(e => {
                     if (e !== this.abortReason) this.switch() // automatic repipe except intended abort
