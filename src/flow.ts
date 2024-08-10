@@ -89,7 +89,7 @@ export class Flowmeter<T> extends EventTarget2 {
         const time = Date.now()
         const value = buffer.reduce((a, b) => a + b.value, 0)
         const delta = value - this.lastWatchInfo.value
-        const interval = time - this.lastWatchInfo.time
+        const interval = (time - this.lastWatchInfo.time) / 1000 // by ms -> s
         const flow = delta / interval
         const info = { time, value, delta, interval, flow }
         this.lastWatchInfo = info
