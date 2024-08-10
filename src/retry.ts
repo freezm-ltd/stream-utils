@@ -7,6 +7,7 @@ export type RetryOption = {
     minSpeed?: number
     minDuration?: number
     slowDown?: number
+    signal?: AbortSignal
 }
 
 // switch <- trigger <- under minSpeed until minDuration
@@ -24,11 +25,20 @@ export function retryableStream<T>(readableGenerator: StreamGenerator<ReadableSt
     const { readable, writable } = flowmeter // sense flow
 
     // add switchablestream
-    const switchable = new SwitchableReadableStream(readableGenerator, context)
+    const switchable = new SwitchableReadableStream(readableGenerator, context, option?.signal)
     switchable.stream.pipeTo(writable)
 
     // add trigger
-    flowmeter.addTrigger(info => option.minSpeed ? info.flow <= option.minSpeed : false, () => switchable.switch(), option.minDuration, option.slowDown)
+    flowmeter.addTrigger(
+        info => option.minSpeed ? info.flow <= option.minSpeed : false, 
+        () => {
+            if (!option?.signal?.aborted) {
+                switchable.switch()
+            }
+        }, 
+        option.minDuration, 
+        option.slowDown
+    )
 
     return readable
 }

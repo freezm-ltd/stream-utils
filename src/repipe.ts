@@ -13,7 +13,8 @@ export abstract class AbstractSwitchableStream<T> extends EventTarget2 {
 
     constructor(
         readonly generator?: StreamGenerator,
-        readonly context?: StreamGeneratorContext
+        readonly context?: StreamGeneratorContext,
+        readonly signal?: AbortSignal,
     ) {
         super()
     }
@@ -30,6 +31,8 @@ export abstract class AbstractSwitchableStream<T> extends EventTarget2 {
             this.isSwitching = true
             await this.abort() // abort previous piping, wait for fully aborted
             this.controller = new AbortController()
+            if (this.signal) this.signal.onabort = () => this.controller.abort(this.abortReason);
+            if (this.signal?.aborted) return;
             if (!to) to = await generator!(this.context, this.controller.signal); // get source
             const { readable, writable } = this.target(to, this.controller.signal)
             for (let i = 0; readable.locked || writable.locked; i += 10) await sleep(i); // wait for releaseLock
@@ -62,7 +65,8 @@ export class SwitchableReadableStream<T> extends AbstractSwitchableStream<T> {
 
     constructor(
         readonly generator?: StreamGenerator<ReadableStream<T>>,
-        readonly context?: StreamGeneratorContext
+        readonly context?: StreamGeneratorContext,
+        readonly signal?: AbortSignal,
     ) {
         super()
         const _this = this
@@ -99,7 +103,8 @@ export class SwitchableWritableStream<T> extends AbstractSwitchableStream<T> {
 
     constructor(
         readonly generator?: StreamGenerator<WritableStream<T>>,
-        readonly context?: StreamGeneratorContext
+        readonly context?: StreamGeneratorContext,
+        readonly signal?: AbortSignal,
     ) {
         super()
         const _this = this

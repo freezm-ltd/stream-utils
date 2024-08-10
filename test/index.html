@@ -81,13 +81,19 @@
                         controller.enqueue(chunk)
                     }
                 })
-                const stream = retryableFetchStream(url, { mode: "cors" }, { minSpeed: Number.POSITIVE_INFINITY, minDuration: 5000, slowDown: 1000 }).pipeThrough(counter)
+                const ac = new AbortController()
+                const stream = retryableFetchStream(url, { mode: "cors" }, { minSpeed: Number.POSITIVE_INFINITY, minDuration: 5000, slowDown: 1000, signal: ac.signal }).pipeThrough(counter)
+                /*stream.pipeTo(new WritableStream())
+                setTimeout(() => {
+                    ac.abort()
+                }, 5 * 1000);*/
                 const buffer = await (new Response(stream)).arrayBuffer()
                 const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-1", buffer)))
                     .map((b) => b.toString(16).padStart(2, "0"))
                     .join(""); // convert bytes to hex string
                 console.log("received:", receive, buffer.byteLength, ", hash:", hash)
                 buffer.transfer(0) // GC
+                
             },
             mergeStream: (number = 10) => {
                 const gens = []

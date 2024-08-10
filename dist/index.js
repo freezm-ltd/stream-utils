@@ -233,10 +233,11 @@ function noop(..._) {
 // src/repipe.ts
 var AbstractSwitchableStream = class extends EventTarget2 {
   // to identify intended abort
-  constructor(generator, context) {
+  constructor(generator, context, signal) {
     super();
     this.generator = generator;
     this.context = context;
+    this.signal = signal;
     this.controller = new AbortController();
     this.abortReason = "SwitchableStreamAbortForSwitching";
     this.isSwitching = false;
@@ -252,6 +253,8 @@ var AbstractSwitchableStream = class extends EventTarget2 {
       this.isSwitching = true;
       await this.abort();
       this.controller = new AbortController();
+      if (this.signal) this.signal.onabort = () => this.controller.abort(this.abortReason);
+      if (this.signal?.aborted) return;
       if (!to) to = await generator(this.context, this.controller.signal);
       const { readable, writable } = this.target(to, this.controller.signal);
       for (let i = 0; readable.locked || writable.locked; i += 10) await sleep(i);
@@ -272,10 +275,11 @@ var AbstractSwitchableStream = class extends EventTarget2 {
   }
 };
 var SwitchableReadableStream = class extends AbstractSwitchableStream {
-  constructor(generator, context) {
+  constructor(generator, context, signal) {
     super();
     this.generator = generator;
     this.context = context;
+    this.signal = signal;
     const _this = this;
     const { readable, writable } = new TransformStream({
       async transform(chunk, controller) {
@@ -302,10 +306,11 @@ var SwitchableReadableStream = class extends AbstractSwitchableStream {
   }
 };
 var SwitchableWritableStream = class extends AbstractSwitchableStream {
-  constructor(generator, context) {
+  constructor(generator, context, signal) {
     super();
     this.generator = generator;
     this.context = context;
+    this.signal = signal;
     const _this = this;
     const { readable, writable } = new TransformStream({
       async transform(chunk, controller) {
@@ -509,9 +514,18 @@ function retryableStream(readableGenerator, context, option, sensor) {
   if (!sensor) sensor = (any) => any.length;
   const flowmeter = new Flowmeter(sensor);
   const { readable, writable } = flowmeter;
-  const switchable = new SwitchableReadableStream(readableGenerator, context);
+  const switchable = new SwitchableReadableStream(readableGenerator, context, option?.signal);
   switchable.stream.pipeTo(writable);
-  flowmeter.addTrigger((info) => option.minSpeed ? info.flow <= option.minSpeed : false, () => switchable.switch(), option.minDuration, option.slowDown);
+  flowmeter.addTrigger(
+    (info) => option.minSpeed ? info.flow <= option.minSpeed : false,
+    () => {
+      if (!option?.signal?.aborted) {
+        switchable.switch();
+      }
+    },
+    option.minDuration,
+    option.slowDown
+  );
   return readable;
 }
 function retryableFetchStream(input, init, option) {
