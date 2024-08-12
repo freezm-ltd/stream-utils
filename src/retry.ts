@@ -1,6 +1,6 @@
 import { lengthCallback, Flowmeter } from "./flow"
 import { StreamGenerator, StreamGeneratorContext, SwitchableReadableStream } from "./repipe"
-import { mergeSignal } from "./utils"
+import { mergeSignal, sleep } from "./utils"
 import { sliceByteStream } from "./slice"
 
 export type RetryOption = {
@@ -82,7 +82,17 @@ export function retryableFetchStream(input: RequestInfo | URL, init?: RequestIni
 
         init.signal = signal ? (init.signal ? mergeSignal(init.signal, signal) : signal) : init.signal // set signal
 
-        const response = await fetch(input, init)
+        let response: Response | undefined = undefined
+        while (!response) {
+            try {
+                response = await fetch(input, init)
+                if (!response.ok) throw new Error(`Response not ok: ${response.status} - ${response.statusText}`);
+            } catch (e) {
+                response = undefined
+                console.log("retryableFetchStream: Fetch error:", e)
+                await sleep(option.slowDown || _option.slowDown)
+            }
+        }
         let stream = response.body
         if (!stream) throw new Error("Error: Cannot find response body")
         if (response.status !== 206 && !response.headers.get("Content-Range") && start !== 0) {

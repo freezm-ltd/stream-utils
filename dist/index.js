@@ -559,7 +559,17 @@ function retryableFetchStream(input, init, option) {
       } else if (init.headers) init.headers["Range"] = Range;
     }
     init.signal = signal ? init.signal ? mergeSignal(init.signal, signal) : signal : init.signal;
-    const response = await fetch(input, init);
+    let response = void 0;
+    while (!response) {
+      try {
+        response = await fetch(input, init);
+        if (!response.ok) throw new Error(`Response not ok: ${response.status} - ${response.statusText}`);
+      } catch (e) {
+        response = void 0;
+        console.log("retryableFetchStream: Fetch error:", e);
+        await sleep(option.slowDown || _option.slowDown);
+      }
+    }
     let stream = response.body;
     if (!stream) throw new Error("Error: Cannot find response body");
     if (response.status !== 206 && !response.headers.get("Content-Range") && start !== 0) {
