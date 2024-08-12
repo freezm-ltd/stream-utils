@@ -1,4 +1,4 @@
-// node_modules/.pnpm/@freezm-ltd+event-target-2@https+++codeload.github.com+freezm-ltd+EventTarget2+tar.gz+11ff208_3njyjyppej5icdv7ro2urw6f3a/node_modules/@freezm-ltd/event-target-2/dist/index.js
+// node_modules/.pnpm/@freezm-ltd+event-target-2@https+++codeload.github.com+freezm-ltd+EventTarget2+tar.gz+94919e1_gbpkf7y4wptyhrdgixdnzzileq/node_modules/@freezm-ltd/event-target-2/dist/index.js
 var EventTarget2 = class extends EventTarget {
   constructor() {
     super(...arguments);
@@ -46,6 +46,15 @@ var EventTarget2 = class extends EventTarget {
       if (only(e)) {
         this.remove(type, wrapper);
         callback(e);
+      }
+    };
+    this.listen(type, wrapper);
+  }
+  listenWhile(type, callback, whileFunc) {
+    const wrapper = (e) => {
+      callback(e);
+      if (!whileFunc(e)) {
+        this.remove(type, wrapper);
       }
     };
     this.listen(type, wrapper);

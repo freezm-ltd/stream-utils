@@ -10,7 +10,7 @@ importers:
     dependencies:
       '@freezm-ltd/event-target-2':
         specifier: github:freezm-ltd/EventTarget2
-        version: https://codeload.github.com/freezm-ltd/EventTarget2/tar.gz/11ff2085067d0ab323ed7474ffd8b03f770d6303
+        version: https://codeload.github.com/freezm-ltd/EventTarget2/tar.gz/94919e17995c55d3e5857af7c8831ca204ce9230
     devDependencies:
       esbuild:
         specifier: ^0.23.0
@@ -165,8 +165,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@freezm-ltd/event-target-2@https://codeload.github.com/freezm-ltd/EventTarget2/tar.gz/11ff2085067d0ab323ed7474ffd8b03f770d6303':
-    resolution: {tarball: https://codeload.github.com/freezm-ltd/EventTarget2/tar.gz/11ff2085067d0ab323ed7474ffd8b03f770d6303}
+  '@freezm-ltd/event-target-2@https://codeload.github.com/freezm-ltd/EventTarget2/tar.gz/94919e17995c55d3e5857af7c8831ca204ce9230':
+    resolution: {tarball: https://codeload.github.com/freezm-ltd/EventTarget2/tar.gz/94919e17995c55d3e5857af7c8831ca204ce9230}
     version: 0.0.4
 
   esbuild@0.23.0:
@@ -253,7 +253,7 @@ snapshots:
   '@esbuild/win32-x64@0.23.0':
     optional: true
 
-  '@freezm-ltd/event-target-2@https://codeload.github.com/freezm-ltd/EventTarget2/tar.gz/11ff2085067d0ab323ed7474ffd8b03f770d6303': {}
+  '@freezm-ltd/event-target-2@https://codeload.github.com/freezm-ltd/EventTarget2/tar.gz/94919e17995c55d3e5857af7c8831ca204ce9230': {}
 
   esbuild@0.23.0:
     optionalDependencies:
