@@ -265,7 +265,7 @@ var AbstractSwitchableStream = class extends EventTarget2 {
       if (this.signal) this.signal.onabort = () => this.controller.abort(this.abortReason);
       if (this.signal?.aborted) return;
       if (!to) to = await generator(this.context, this.controller.signal);
-      const { readable, writable } = this.target(to, this.controller.signal);
+      const { readable, writable } = this.target(to);
       for (let i = 0; readable.locked || writable.locked; i += 10) await sleep(i);
       readable.pipeTo(writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.controller.signal }).then(() => {
         writable.close();
@@ -289,25 +289,15 @@ var SwitchableReadableStream = class extends AbstractSwitchableStream {
     this.generator = generator;
     this.context = context;
     this.signal = signal;
-    const _this = this;
-    const { readable, writable } = new TransformStream({
-      async transform(chunk, controller) {
-        if (_this.isSwitching) await _this.waitFor("switch-done");
-        controller.enqueue(chunk);
-      }
-    });
+    const { readable, writable } = new TransformStream();
     this.stream = readable;
-    const buffer = new TransformStream();
-    this.writable = buffer.writable;
-    buffer.readable.pipeTo(writable);
+    this.writable = writable;
     if (generator) this.switch();
   }
-  target(to, signal) {
-    const { readable, writable } = new TransformStream();
-    readable.pipeTo(this.writable, { preventCancel: true, preventAbort: true, signal }).catch(noop);
+  target(to) {
     return {
       readable: to,
-      writable
+      writable: this.writable
     };
   }
   get locked() {
@@ -320,22 +310,14 @@ var SwitchableWritableStream = class extends AbstractSwitchableStream {
     this.generator = generator;
     this.context = context;
     this.signal = signal;
-    const _this = this;
-    const { readable, writable } = new TransformStream({
-      async transform(chunk, controller) {
-        if (_this.isSwitching) await _this.waitFor("switch-done");
-        controller.enqueue(chunk);
-      }
-    });
+    const { readable, writable } = new TransformStream();
     this.stream = writable;
     this.readable = readable;
     if (generator) this.switch();
   }
-  target(to, signal) {
-    const { readable, writable } = new TransformStream();
-    this.readable.pipeTo(writable, { preventCancel: true, preventAbort: true, signal }).catch(noop);
+  target(to) {
     return {
-      readable,
+      readable: this.readable,
       writable: to
     };
   }
@@ -516,12 +498,12 @@ function mergeStream(generators, context, option) {
 }
 
 // src/retry.ts
-function retryableStream(readableGenerator, context, option, sensor) {
+function retryableStream(readableGenerator, context, option) {
   let _option = { slowDown: 0, minSpeed: 0, minDuration: 1e3 };
   Object.assign(_option, option);
   option = _option;
-  if (!sensor) sensor = (any) => any.length;
-  const flowmeter = new Flowmeter(sensor);
+  if (!option.sensor) option.sensor = (any) => any.length;
+  const flowmeter = new Flowmeter(option.sensor);
   const { readable, writable } = flowmeter;
   const switchable = new SwitchableReadableStream(readableGenerator, context, option?.signal);
   switchable.stream.pipeTo(writable);

@@ -30,7 +30,10 @@
                         i++
                     }
                 })
-                const switchable = new SwitchableReadableStream()
+                const switchable = new SwitchableReadableStream(async () => {
+                    await sleep(stdms * Math.random() * 10)
+                    return stream
+                })
                 switchable.stream.pipeTo(new WritableStream({
                     write(chunk) {
                         console.log(chunk)
@@ -40,9 +43,8 @@
                 while (num / 10 > reconnect) {
                     reconnect++
                     console.log("reconnect start", reconnect)
-                    await switchable.switch(stream)
+                    await switchable.switch()
                     console.log("reconnect end", reconnect)
-                    await sleep(stdms * Math.random() * 10)
                 }
             },
             controlledStream: async (num = 1000, stdms = 20) => {

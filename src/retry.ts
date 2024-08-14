@@ -3,25 +3,26 @@ import { StreamGenerator, StreamGeneratorContext, SwitchableReadableStream } fro
 import { mergeSignal, sleep } from "./utils"
 import { sliceByteStream } from "./slice"
 
-export type RetryOption = {
+export type RetryOption<T> = {
     minSpeed?: number
     minDuration?: number
     slowDown?: number
     signal?: AbortSignal
+    sensor?: (chunk: T) => number
 }
 
 // switch <- trigger <- under minSpeed until minDuration
 //    |                               |
 // source -> SwitchableStream -> Flowmeter -> sink
-export function retryableStream<T>(readableGenerator: StreamGenerator<ReadableStream<T>>, context: StreamGeneratorContext, option?: RetryOption, sensor?: (chunk: T) => number) {
+export function retryableStream<T>(readableGenerator: StreamGenerator<ReadableStream<T>>, context: StreamGeneratorContext, option?: RetryOption<T>) {
     let _option = { slowDown: 0, minSpeed: 0, minDuration: 1_000 }
     Object.assign(_option, option)
     option = _option
 
-    if (!sensor) sensor = (any: any) => any.length;
+    if (!option.sensor) option.sensor = (any: any) => any.length;
 
     // add flowmeter
-    const flowmeter = new Flowmeter(sensor)
+    const flowmeter = new Flowmeter(option.sensor)
     const { readable, writable } = flowmeter // sense flow
 
     // add switchablestream
@@ -44,7 +45,7 @@ export function retryableStream<T>(readableGenerator: StreamGenerator<ReadableSt
 }
 
 // retrying request
-export function retryableFetchStream(input: RequestInfo | URL, init?: RequestInit, option?: RetryOption) {
+export function retryableFetchStream(input: RequestInfo | URL, init?: RequestInit, option?: RetryOption<Uint8Array>) {
     let _option = { slowDown: 5_000, minSpeed: 5_120, minDuration: 10_000 }
     Object.assign(_option, option)
     option = _option

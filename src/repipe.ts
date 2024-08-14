@@ -1,7 +1,7 @@
 // Bring back Readable/WritableStream and re-pipe each other, when they are broken or other event emitted
 
 import { EventTarget2 } from "@freezm-ltd/event-target-2"
-import { noop, PromiseLikeOrNot, sleep } from "./utils"
+import { PromiseLikeOrNot, sleep } from "./utils"
 
 export type StreamGenerator<T = ReadableStream | WritableStream> = (context?: StreamGeneratorContext, signal?: AbortSignal) => PromiseLikeOrNot<T>
 export type StreamGeneratorContext = any
@@ -34,7 +34,7 @@ export abstract class AbstractSwitchableStream<T> extends EventTarget2 {
             if (this.signal) this.signal.onabort = () => this.controller.abort(this.abortReason);
             if (this.signal?.aborted) return;
             if (!to) to = await generator!(this.context, this.controller.signal); // get source
-            const { readable, writable } = this.target(to, this.controller.signal)
+            const { readable, writable } = this.target(to)
             for (let i = 0; readable.locked || writable.locked; i += 10) await sleep(i); // wait for releaseLock
             readable.pipeTo(writable, { preventAbort: true, preventCancel: true, preventClose: true, signal: this.controller.signal })
                 .then(() => {
@@ -55,7 +55,7 @@ export abstract class AbstractSwitchableStream<T> extends EventTarget2 {
         }
     }
 
-    protected abstract target(to: ReadableStream | WritableStream, signal?: AbortSignal): { readable: ReadableStream, writable: WritableStream }
+    protected abstract target(to: ReadableStream | WritableStream): { readable: ReadableStream, writable: WritableStream }
     protected abstract get locked(): boolean
 }
 
@@ -69,26 +69,16 @@ export class SwitchableReadableStream<T> extends AbstractSwitchableStream<T> {
         readonly signal?: AbortSignal,
     ) {
         super()
-        const _this = this
-        const { readable, writable } = new TransformStream<T, T>({
-            async transform(chunk, controller) {
-                if (_this.isSwitching) await _this.waitFor("switch-done"); // wait for switching done
-                controller.enqueue(chunk)
-            }
-        })
+        const { readable, writable } = new TransformStream<T, T>()
         this.stream = readable
-        const buffer = new TransformStream()
-        this.writable = buffer.writable
-        buffer.readable.pipeTo(writable)
+        this.writable = writable
         if (generator) this.switch() // immediate starting
     }
 
-    protected target(to: ReadableStream<T>, signal?: AbortSignal) {
-        const { readable, writable } = new TransformStream()
-        readable.pipeTo(this.writable, { preventCancel: true, preventAbort: true, signal }).catch(noop)
+    protected target(to: ReadableStream<T>) {
         return {
             readable: to,
-            writable,
+            writable: this.writable,
         }
     }
 
@@ -107,23 +97,15 @@ export class SwitchableWritableStream<T> extends AbstractSwitchableStream<T> {
         readonly signal?: AbortSignal,
     ) {
         super()
-        const _this = this
-        const { readable, writable } = new TransformStream<T, T>({
-            async transform(chunk, controller) {
-                if (_this.isSwitching) await _this.waitFor("switch-done");
-                controller.enqueue(chunk)
-            }
-        })
+        const { readable, writable } = new TransformStream<T, T>()
         this.stream = writable
         this.readable = readable
         if (generator) this.switch() // immediate starting
     }
 
-    protected target(to: WritableStream<T>, signal?: AbortSignal) {
-        const { readable, writable } = new TransformStream()
-        this.readable.pipeTo(writable, { preventCancel: true, preventAbort: true, signal }).catch(noop)
+    protected target(to: WritableStream<T>) {
         return {
-            readable: readable,
+            readable: this.readable,
             writable: to,
         }
     }
