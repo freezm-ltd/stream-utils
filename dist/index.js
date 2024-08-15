@@ -141,7 +141,7 @@ var Flowmeter = class extends EventTarget2 {
     this.listenerWeakMap = /* @__PURE__ */ new WeakMap();
     this.closed = false;
     this.lastWatchInfo = { time: Date.now(), value: 0, delta: 0, interval: 0, flow: 0 };
-    setInterval(() => this.watch(), interval);
+    const watchInterval = setInterval(() => this.watch(), interval);
     const _this = this;
     const { readable, writable } = new TransformStream({
       transform(chunk, controller) {
@@ -152,6 +152,7 @@ var Flowmeter = class extends EventTarget2 {
       flush() {
         _this.closed = true;
         _this.destroy();
+        clearInterval(watchInterval);
       }
     });
     this.readable = readable;
@@ -165,17 +166,20 @@ var Flowmeter = class extends EventTarget2 {
     let timeout = null;
     let skip = false;
     const setTimeout2 = globalThis.setTimeout;
+    const callbackWrap = async () => {
+      skip = true;
+      await callback();
+      setTimeout2(() => {
+        skip = false;
+      }, slowDown);
+    };
     const listener = async (e) => {
       const info = e.detail;
       if (await trigger(info)) {
         if (!timeout && !skip) {
           const handler = () => {
-            if (!this.closed) callback();
+            if (!this.closed) callbackWrap();
             timeout = null;
-            skip = true;
-            setTimeout2(() => {
-              skip = false;
-            }, slowDown);
           };
           timeout = setTimeout2(handler, triggerDuration);
         }
@@ -195,7 +199,6 @@ var Flowmeter = class extends EventTarget2 {
   watch() {
     const time = Date.now();
     const value = this.written;
-    this.written = 0;
     const delta = value - this.lastWatchInfo.value;
     const interval = (time - this.lastWatchInfo.time) / 1e3;
     const flow = delta / interval;

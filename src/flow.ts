@@ -27,7 +27,7 @@ export class Flowmeter<T> extends EventTarget2 {
     ) {
         super()
         this.lastWatchInfo = { time: Date.now(), value: 0, delta: 0, interval: 0, flow: 0 }
-        setInterval(() => this.watch(), interval)
+        const watchInterval = setInterval(() => this.watch(), interval)
 
         // to measure flow, pipeThrough this
         const _this = this
@@ -40,6 +40,7 @@ export class Flowmeter<T> extends EventTarget2 {
             flush() {
                 _this.closed = true
                 _this.destroy()
+                clearInterval(watchInterval)
             }
         })
         this.readable = readable
@@ -54,15 +55,18 @@ export class Flowmeter<T> extends EventTarget2 {
         let timeout: number | null = null
         let skip = false
         const setTimeout = (globalThis as WindowOrWorkerGlobalScope).setTimeout
+        const callbackWrap = async () => {
+            skip = true
+            await callback()
+            setTimeout(() => { skip = false }, slowDown); // slowDown timeout
+        }
         const listener = async (e: CustomEvent<FlowInfo>) => {
             const info = e.detail
             if (await trigger(info)) { // if triggered
                 if (!timeout && !skip) {
                     const handler = () => {
-                        if (!this.closed) callback(); // trigger callback
+                        if (!this.closed) callbackWrap(); // trigger callback
                         timeout = null
-                        skip = true; // apply slowDown
-                        setTimeout(() => { skip = false }, slowDown); // slowDown timeout
                     }
                     timeout = setTimeout(handler, triggerDuration); // initiate timeout
                 }
@@ -83,13 +87,12 @@ export class Flowmeter<T> extends EventTarget2 {
 
     protected watch() { // create flow info
         const time = Date.now()
-        const value = this.written; this.written = 0;
+        const value = this.written
         const delta = value - this.lastWatchInfo.value
         const interval = (time - this.lastWatchInfo.time) / 1000 // by ms -> s
         const flow = delta / interval
         const info = { time, value, delta, interval, flow }
         this.lastWatchInfo = info
-        console.debug(info)
         this.dispatch("flow", info) // emit event with flow info
     }
 }
