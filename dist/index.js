@@ -204,7 +204,6 @@ var Flowmeter = class extends EventTarget2 {
     const flow = delta / interval;
     const info = { time, value, delta, interval, flow };
     this.lastWatchInfo = info;
-    console.debug(info);
     this.dispatch("flow", info);
   }
 };
