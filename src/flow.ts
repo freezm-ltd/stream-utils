@@ -4,10 +4,6 @@ import { PromiseLikeOrNot } from "./utils"
 // Measure ReadableStream's flow(speed) by byte-size, chunk-number, ...etc and emit event when stream flow triggers custom trigger
 
 export type FlowSensor<T> = (chunk: T) => number
-export type FlowSensorValue = {
-    time: number
-    value: number
-}
 export type FlowInfo = {
     time: number
     value: number
@@ -18,7 +14,7 @@ export type FlowInfo = {
 export type FlowTrigger = (info: FlowInfo) => PromiseLikeOrNot<boolean>
 
 export class Flowmeter<T> extends EventTarget2 {
-    protected buffer: Array<FlowSensorValue> = []
+    protected written: number = 0
     protected lastWatchInfo: FlowInfo
     protected listenerWeakMap: WeakMap<FlowTrigger, EventListener2> = new WeakMap()
     protected closed = false
@@ -38,7 +34,8 @@ export class Flowmeter<T> extends EventTarget2 {
         const { readable, writable } = new TransformStream<T, T>({
             transform(chunk, controller) {
                 controller.enqueue(chunk)
-                _this.process(chunk)
+                const value = _this.sensor(chunk)
+                _this.written += value
             },
             flush() {
                 _this.closed = true
@@ -85,21 +82,14 @@ export class Flowmeter<T> extends EventTarget2 {
     }
 
     protected watch() { // create flow info
-        const buffer = this.buffer; this.buffer = []
         const time = Date.now()
-        const value = buffer.reduce((a, b) => a + b.value, 0)
+        const value = this.written; this.written = 0;
         const delta = value - this.lastWatchInfo.value
-        const interval = (time - this.lastWatchInfo.time) / 1000 // by ms -> s
+        const interval = (time - this.lastWatchInfo.time) / this.interval // by ms -> s
         const flow = delta / interval
         const info = { time, value, delta, interval, flow }
         this.lastWatchInfo = info
         this.dispatch("flow", info) // emit event with flow info
-    }
-
-    protected process(chunk: T) { // create raw value with custom sensor function
-        const time = Date.now()
-        const value = this.sensor(chunk)
-        this.buffer.push({ time, value })
     }
 }
 

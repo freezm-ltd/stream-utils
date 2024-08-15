@@ -137,7 +137,7 @@ var Flowmeter = class extends EventTarget2 {
     super();
     this.sensor = sensor;
     this.interval = interval;
-    this.buffer = [];
+    this.written = 0;
     this.listenerWeakMap = /* @__PURE__ */ new WeakMap();
     this.closed = false;
     this.lastWatchInfo = { time: Date.now(), value: 0, delta: 0, interval: 0, flow: 0 };
@@ -146,7 +146,8 @@ var Flowmeter = class extends EventTarget2 {
     const { readable, writable } = new TransformStream({
       transform(chunk, controller) {
         controller.enqueue(chunk);
-        _this.process(chunk);
+        const value = _this.sensor(chunk);
+        _this.written += value;
       },
       flush() {
         _this.closed = true;
@@ -192,21 +193,15 @@ var Flowmeter = class extends EventTarget2 {
     this.listenerWeakMap.delete(trigger);
   }
   watch() {
-    const buffer = this.buffer;
-    this.buffer = [];
     const time = Date.now();
-    const value = buffer.reduce((a, b) => a + b.value, 0);
+    const value = this.written;
+    this.written = 0;
     const delta = value - this.lastWatchInfo.value;
-    const interval = (time - this.lastWatchInfo.time) / 1e3;
+    const interval = (time - this.lastWatchInfo.time) / this.interval;
     const flow = delta / interval;
     const info = { time, value, delta, interval, flow };
     this.lastWatchInfo = info;
     this.dispatch("flow", info);
-  }
-  process(chunk) {
-    const time = Date.now();
-    const value = this.sensor(chunk);
-    this.buffer.push({ time, value });
   }
 };
 function chunkCallback(callback) {
