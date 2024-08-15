@@ -197,10 +197,11 @@ var Flowmeter = class extends EventTarget2 {
     const value = this.written;
     this.written = 0;
     const delta = value - this.lastWatchInfo.value;
-    const interval = (time - this.lastWatchInfo.time) / this.interval;
+    const interval = (time - this.lastWatchInfo.time) / 1e3;
     const flow = delta / interval;
     const info = { time, value, delta, interval, flow };
     this.lastWatchInfo = info;
+    console.debug(info);
     this.dispatch("flow", info);
   }
 };
