@@ -479,7 +479,9 @@ function mergeStream(generators, context, option) {
       await buffer[index].pipeTo(writable, { preventClose: true }).catch((e) => {
         Object.values(buffer).forEach((stream) => stream.cancel(e).catch(() => {
         }));
-        console.debug("mergeStream error:", e);
+        if (!signal || !signal.aborted) {
+          console.debug("mergeStream error:", e);
+        }
         errored = true;
       });
       if (errored) break;
