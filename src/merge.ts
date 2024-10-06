@@ -34,7 +34,7 @@ export function mergeStream<T>(generators: Array<StreamGenerator<ReadableStream<
                 // error occurred, cancel all
                 Object.values(buffer).forEach(stream => stream.cancel(e).catch(() => {/* silent catch */}))
                 if (!signal || !signal.aborted) { // not aborted
-                    console.debug("mergeStream error:", e)
+                    if (e) console.log("mergeStream error:", e);
                 }
                 errored = true
             })

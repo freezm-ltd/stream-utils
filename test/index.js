@@ -480,7 +480,7 @@ function mergeStream(generators, context, option) {
         Object.values(buffer).forEach((stream) => stream.cancel(e).catch(() => {
         }));
         if (!signal || !signal.aborted) {
-          console.debug("mergeStream error:", e);
+          if (e) console.log("mergeStream error:", e);
         }
         errored = true;
       });
@@ -552,6 +552,7 @@ function retryableFetchStream(input, init, option) {
     init.signal = signal ? init.signal ? mergeSignal(init.signal, signal) : signal : init.signal;
     let response = void 0;
     while (!response) {
+      if (init.signal?.aborted) throw new Error("retryableFetchStream: aborted");
       try {
         response = await fetch(input, init);
         if (!response.ok) throw new Error(`Response not ok: ${response.status} - ${response.statusText}`);
