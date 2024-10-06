@@ -85,6 +85,7 @@ export function retryableFetchStream(input: RequestInfo | URL, init?: RequestIni
 
         let response: Response | undefined = undefined
         while (!response) {
+            if (init.signal?.aborted) throw new Error("retryableFetchStream: aborted")
             try {
                 response = await fetch(input, init)
                 if (!response.ok) throw new Error(`Response not ok: ${response.status} - ${response.statusText}`);
