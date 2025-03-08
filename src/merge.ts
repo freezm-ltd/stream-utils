@@ -14,12 +14,20 @@ export function mergeStream<T>(generators: Array<StreamGenerator<ReadableStream<
     const { readable, writable } = new TransformStream<T, T>(undefined, option?.writableStrategy, option?.readableStrategy)
     const emitter = new EventTarget2() // event emitter
     const buffer: Record<number, ReadableStream<T>> = {} // generated streams
-    const signal = option?.signal
+    const ac = new AbortController()
+    const signal = ac.signal
     const parallel = option?.parallel || 1
     
+    option?.signal?.addEventListener('abort', (e) => ac.abort(e.toString()));
+
     const load = async (index: number) => {
         if (index >= generators.length) return; // out of bound
-        buffer[index] = await generators[index](context, signal) // load stream
+        try {
+            buffer[index] = await generators[index](context, signal) // load stream
+        } catch (e) {
+            buffer[index] = new ReadableStream()
+            buffer[index].cancel(e)
+        }
         emitter.dispatch("load", index) // call stream loaded
     }
 

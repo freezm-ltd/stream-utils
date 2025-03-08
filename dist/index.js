@@ -463,11 +463,18 @@ function mergeStream(generators, context, option) {
   const { readable, writable } = new TransformStream(void 0, option?.writableStrategy, option?.readableStrategy);
   const emitter = new EventTarget2();
   const buffer = {};
-  const signal = option?.signal;
+  const ac = new AbortController();
+  const signal = ac.signal;
   const parallel = option?.parallel || 1;
+  option?.signal?.addEventListener("abort", (e) => ac.abort(e.toString()));
   const load = async (index) => {
     if (index >= generators.length) return;
-    buffer[index] = await generators[index](context, signal);
+    try {
+      buffer[index] = await generators[index](context, signal);
+    } catch (e) {
+      buffer[index] = new ReadableStream();
+      buffer[index].cancel(e);
+    }
     emitter.dispatch("load", index);
   };
   emitter.listen("next", (e) => load(e.detail));
