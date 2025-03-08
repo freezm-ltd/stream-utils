@@ -6,6 +6,7 @@ export type MergeOption = {
     signal?: AbortSignal
     writableStrategy?: QueuingStrategy
     readableStrategy?: QueuingStrategy
+    onerror?: (reason?: any) => void
 }
 
 // merge multiple streams, parallel loading and sequential piping
@@ -27,6 +28,7 @@ export function mergeStream<T>(generators: Array<StreamGenerator<ReadableStream<
         } catch (e) {
             buffer[index] = new ReadableStream()
             buffer[index].cancel(e)
+            option?.onerror?.(e)
         }
         emitter.dispatch("load", index) // call stream loaded
     }

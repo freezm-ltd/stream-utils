@@ -474,6 +474,7 @@ function mergeStream(generators, context, option) {
     } catch (e) {
       buffer[index] = new ReadableStream();
       buffer[index].cancel(e);
+      option?.onerror?.(e);
     }
     emitter.dispatch("load", index);
   };
